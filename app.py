@@ -189,5 +189,15 @@ if __name__ == '__main__':
                 role='admin'
             )
             db.session.add(admin)
-            db.session.commit()
+            
+        # Create test user if not exists
+        if not User.query.filter_by(username='nurse1').first():
+            test_user = User(
+                username='nurse1',
+                password_hash=generate_password_hash('nurse123'),
+                role='user'
+            )
+            db.session.add(test_user)
+            
+        db.session.commit()
     app.run(debug=True)
