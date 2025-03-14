@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Patient {{ patient_id }} - Ward {{ ward_num }}</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.9.3/css/bulma.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            padding: 20px;
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        .title {
+            color: #1a365d;
+            font-weight: 700;
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+        }
+        .subtitle {
+            color: #4a5568;
+            margin-bottom: 2rem;
+            font-size: 1.1rem;
+        }
+        .patient-card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+            padding: 2rem;
+            margin-bottom: 2rem;
+        }
+        .patient-info {
+            white-space: pre-wrap;
+            font-family: 'Inter', sans-serif;
+            color: #2d3748;
+            line-height: 1.6;
+        }
+        .navigation {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        .nav-button {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+            font-weight: 500;
+            text-decoration: none;
+        }
+        .back-to-ward {
+            background-color: #4299e1;
+            color: white;
+        }
+        .back-to-ward:hover {
+            background-color: #3182ce;
+            transform: translateY(-1px);
+            color: white;
+        }
+        .back-to-home {
+            background-color: #718096;
+            color: white;
+        }
+        .back-to-home:hover {
+            background-color: #4a5568;
+            transform: translateY(-1px);
+            color: white;
+        }
+        .patient-header {
+            margin-bottom: 2rem;
+        }
+        .ward-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            background-color: #ebf8ff;
+            color: #2b6cb0;
+            padding: 0.5rem 1rem;
+            border-radius: 9999px;
+            font-weight: 500;
+            margin-bottom: 1rem;
+        }
+        .navbar {
+            background: white;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+            padding: 1rem 2rem;
+            margin-bottom: 2rem;
+        }
+        .navbar-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .user-nav {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        .username {
+            color: #4a5568;
+            font-weight: 500;
+        }
+        .audit-link {
+            color: #4299e1;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .audit-link:hover {
+            color: #3182ce;
+        }
+        .logout-button {
+            background-color: #fff5f5;
+            color: #c53030;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.3s ease;
+        }
+        .logout-button:hover {
+            background-color: #fed7d7;
+            color: #c53030;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="navbar-content">
+            <div class="username">
+                <i class="fas fa-user"></i>
+                Welcome, {{ current_user.username }}
+            </div>
+            <div class="user-nav">
+                {% if current_user.role == 'admin' %}
+                <a href="{{ url_for('view_audit_log') }}" class="audit-link">
+                    <i class="fas fa-history"></i>
+                    View Audit Log
+                </a>
+                {% endif %}
+                <a href="{{ url_for('logout') }}" class="logout-button">
+                    <i class="fas fa-sign-out-alt"></i>
+                    Logout
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="navigation">
+            <a href="/ward/{{ ward_num }}" class="nav-button back-to-ward">
+                <i class="fas fa-arrow-left"></i>
+                Back to Ward {{ ward_num }}
+            </a>
+            <a href="/" class="nav-button back-to-home">
+                <i class="fas fa-home"></i>
+                Home
+            </a>
+        </div>
+
+        <div class="patient-header">
+            <div class="ward-badge">
+                <i class="fas fa-hospital-user"></i>
+                Ward {{ ward_num }}
+            </div>
+            <h1 class="title">Patient Record</h1>
+            <p class="subtitle">{{ pdf_filename }}</p>
+        </div>
+
+        <div class="patient-card">
+            <h2 class="subtitle is-4">Patient ID: {{ patient_id }}</h2>
+            <h3 class="subtitle is-5">Name: {{ patient_name }}</h3>
+            <div class="patient-info">
+                {{ patient_info }}
+            </div>
+        </div>
+    </div>
+</body>
+</html>
