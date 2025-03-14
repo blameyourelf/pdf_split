@@ -5,11 +5,17 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from PyPDF2 import PdfReader
 import os
 from datetime import datetime
+from sqlalchemy import create_engine
+from sqlalchemy.orm import scoped_session, sessionmaker
 
 app = Flask(__name__)
-# Use a fixed SECRET_KEY for session management
 app.config['SECRET_KEY'] = 'your-super-secret-key-8712'  # Change this in production
+
+# Main database for users
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
+app.config['SQLALCHEMY_BINDS'] = {
+    'audit': 'sqlite:///audit.db'
+}
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
@@ -17,22 +23,22 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 
-# User Model
+# User Model in main database
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     password_hash = db.Column(db.String(120), nullable=False)
     role = db.Column(db.String(20), nullable=False, default='user')
 
-# Audit Log Model
+# Audit Log Model in separate database
 class AuditLog(db.Model):
+    __bind_key__ = 'audit'  # This tells SQLAlchemy to use the audit database
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    user_id = db.Column(db.Integer, nullable=False)
+    username = db.Column(db.String(80), nullable=False)  # Store username directly for persistence
     action = db.Column(db.String(50), nullable=False)
     patient_id = db.Column(db.String(50), nullable=True)
     timestamp = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
-    
-    user = db.relationship('User', backref=db.backref('audit_logs', lazy=True))
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -42,6 +48,7 @@ def log_access(action, patient_id=None):
     if current_user.is_authenticated:
         log = AuditLog(
             user_id=current_user.id,
+            username=current_user.username,  # Store username directly
             action=action,
             patient_id=patient_id
         )
@@ -180,7 +187,10 @@ def view_audit_log():
 
 if __name__ == '__main__':
     with app.app_context():
+        # Create both databases and tables
         db.create_all()
+        db.create_all(bind=['audit'])
+        
         # Create default admin user if not exists
         if not User.query.filter_by(username='admin').first():
             admin = User(
