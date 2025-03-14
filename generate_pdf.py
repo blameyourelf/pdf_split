@@ -96,8 +96,9 @@ def create_pdf(file_path, ward_num):
     y_position -= 30
     
     c.setFont("Helvetica", 12)
-    for i in range(10):
-        patient_id = f"W{ward_num}-{random.randint(1000000000, 9999999999)}"
+    for i in range(24):  # Changed to 24 patients per ward
+        # Generate a random 10-digit number for patient ID
+        patient_id = str(random.randint(1000000000, 9999999999))
         patient_info = generate_patient_info(patient_id, ward_num)
         
         # Add bookmarks for navigation
@@ -117,6 +118,6 @@ def create_pdf(file_path, ward_num):
     c.save()
 
 if __name__ == "__main__":
-    # Create PDFs for each ward
-    for ward_num in range(1, 4):
+    # Create PDFs for each ward (1-80)
+    for ward_num in range(1, 81):
         create_pdf(f"ward_{ward_num}_records.pdf", ward_num)

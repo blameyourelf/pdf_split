@@ -73,10 +73,9 @@ def extract_patient_info(pdf_path):
                 if current_patient:
                     patient_data[current_patient] = {
                         "info": "\n".join(current_info),
-                        "name": next((l.split(": ")[1] for l in current_info if l.startswith("Name:")), "Unknown"),
-                        "ward": next((l.split(": ")[1] for l in current_info if l.startswith("Ward:")), "Unknown")
+                        "name": next((l.split(": ")[1] for l in current_info if l.startswith("Name:")), "Unknown")
                     }
-                current_patient = line.split(": ")[1]
+                current_patient = line.split(": ")[1].strip()
                 current_info = [line]
             else:
                 if current_patient:
@@ -85,8 +84,7 @@ def extract_patient_info(pdf_path):
         if current_patient:
             patient_data[current_patient] = {
                 "info": "\n".join(current_info),
-                "name": next((l.split(": ")[1] for l in current_info if l.startswith("Name:")), "Unknown"),
-                "ward": next((l.split(": ")[1] for l in current_info if l.startswith("Ward:")), "Unknown")
+                "name": next((l.split(": ")[1] for l in current_info if l.startswith("Name:")), "Unknown")
             }
     
     return patient_data
@@ -95,10 +93,15 @@ def extract_patient_info(pdf_path):
 def load_ward_data():
     global wards_data
     wards_data.clear()
-    for ward_num in range(1, 4):
-        pdf_filename = f"ward_{ward_num}_records.pdf"
+    
+    # Find all ward PDF files
+    ward_files = [f for f in os.listdir('.') if f.startswith('ward_') and f.endswith('_records.pdf')]
+    
+    for pdf_filename in ward_files:
+        # Extract ward number from filename (ward_X_records.pdf)
+        ward_num = pdf_filename.split('_')[1]
         if os.path.exists(pdf_filename):
-            wards_data[str(ward_num)] = {
+            wards_data[ward_num] = {
                 "filename": pdf_filename,
                 "patients": extract_patient_info(pdf_filename)
             }
