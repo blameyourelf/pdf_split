@@ -140,6 +140,88 @@
             background-color: #fed7d7;
             color: #c53030;
         }
+        .care-notes-table {
+            width: 100%;
+            margin-top: 2rem;
+            border-collapse: collapse;
+        }
+        .care-notes-table th {
+            background-color: #f7fafc;
+            color: #4a5568;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            letter-spacing: 0.05em;
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 2px solid #e2e8f0;
+        }
+        .care-notes-table td {
+            padding: 1rem;
+            border-bottom: 1px solid #e2e8f0;
+            color: #2d3748;
+            font-size: 0.875rem;
+            vertical-align: top;
+        }
+        .care-notes-table tr:hover {
+            background-color: #f7fafc;
+        }
+        .patient-info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        .info-item {
+            background: #f7fafc;
+            padding: 1rem;
+            border-radius: 8px;
+        }
+        .info-label {
+            color: #4a5568;
+            font-size: 0.875rem;
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+        }
+        .info-value {
+            color: #2d3748;
+            font-size: 1rem;
+            font-weight: 600;
+        }
+        .vitals-section {
+            background: #fff5f7;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 2rem;
+        }
+        .vitals-title {
+            color: #702459;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+        .section-title {
+            color: #2d3748;
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid #e2e8f0;
+        }
+        .loading {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 2rem;
+        }
+        .loading-spinner {
+            animation: spin 1s linear infinite;
+            font-size: 2rem;
+            color: #4299e1;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body>
@@ -186,11 +268,45 @@
         </div>
 
         <div class="patient-card">
-            <h2 class="subtitle is-4">Patient ID: {{ patient_id }}</h2>
-            <h3 class="subtitle is-5">Name: {{ patient_name }}</h3>
-            <div class="patient-info">
-                {{ patient_info }}
+            <div class="patient-info-grid">
+                {% for field, value in patient_info_dict.items() %}
+                <div class="info-item">
+                    <div class="info-label">{{ field }}</div>
+                    <div class="info-value">{{ value }}</div>
+                </div>
+                {% endfor %}
             </div>
+
+            {% if vitals %}
+            <div class="vitals-section">
+                <div class="vitals-title">Current Vital Signs</div>
+                <div>{{ vitals }}</div>
+            </div>
+            {% endif %}
+
+            <h3 class="section-title">
+                <i class="fas fa-notes-medical"></i>
+                Continuous Care Notes
+            </h3>
+            
+            <table class="care-notes-table">
+                <thead>
+                    <tr>
+                        <th>Date & Time</th>
+                        <th>Staff Member</th>
+                        <th>Notes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for note in care_notes %}
+                    <tr>
+                        <td>{{ note.date }}</td>
+                        <td>{{ note.staff }}</td>
+                        <td>{{ note.note }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
         </div>
     </div>
 </body>

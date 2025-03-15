@@ -154,15 +154,58 @@
             background-color: #fed7d7;
             color: #c53030;
         }
+        .loading {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 2rem;
+        }
+        .loading-spinner {
+            animation: spin 1s linear infinite;
+            font-size: 2rem;
+            color: #4299e1;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
     <script>
         async function searchPatients() {
             const query = document.getElementById('search').value;
-            const response = await fetch(`/search/{{ ward_num }}?q=${query}`);
-            const results = await response.json();
+            const loadingEl = document.getElementById('loading-indicator');
+            const patientList = document.getElementById('patient-list');
+            
+            try {
+                // Show loading indicator
+                loadingEl.style.display = 'flex';
+                patientList.style.display = 'none';
+                
+                const response = await fetch(`/search/{{ ward_num }}?q=${encodeURIComponent(query)}`);
+                if (!response.ok) {
+                    throw new Error('Search failed');
+                }
+                const results = await response.json();
+                displayPatients(results);
+            } catch (error) {
+                console.error('Error during search:', error);
+            } finally {
+                // Hide loading indicator
+                loadingEl.style.display = 'none';
+                patientList.style.display = 'grid';
+            }
+        }
+
+        function displayPatients(patients) {
             const list = document.getElementById('patient-list');
             list.innerHTML = '';
-            results.forEach(result => {
+            
+            if (patients.length === 0) {
+                list.innerHTML = '<li>No patients found</li>';
+                return;
+            }
+
+            patients.forEach(result => {
                 const li = document.createElement('li');
                 li.innerHTML = `
                     <a href="/patient/${result.id}" class="patient-card">
@@ -181,6 +224,9 @@
                 list.appendChild(li);
             });
         }
+
+        // Load patients immediately when page loads
+        window.addEventListener('load', searchPatients);
     </script>
 </head>
 <body>
@@ -231,7 +277,12 @@
                 </div>
             </form>
         </div>
-
+        
+        <!-- Loading indicator -->
+        <div id="loading-indicator" class="loading" style="display: none;">
+            <i class="fas fa-spinner loading-spinner"></i>
+        </div>
+        
         <ul class="patient-list" id="patient-list">
             {% for patient_id, patient_info in ward_data.patients.items() %}
                 <li>

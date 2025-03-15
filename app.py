@@ -1,15 +1,24 @@
-from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, session
+from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, session, make_response
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from PyPDF2 import PdfReader
+from flask_wtf.csrf import CSRFProtect
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from sqlalchemy import create_engine
 from sqlalchemy.orm import scoped_session, sessionmaker
+from functools import lru_cache
+import re
+import logging
+import threading
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-super-secret-key-8712'  # Change this in production
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=24)  # Session lasts 24 hours
+app.config['SESSION_COOKIE_SECURE'] = False  # Set to True in production
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 
 # Main database for users
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
@@ -19,9 +28,20 @@ app.config['SQLALCHEMY_BINDS'] = {
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
+
+# Initialize CSRF protection
+csrf = CSRFProtect(app)
+
+# Initialize login manager with improved configuration
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
+login_manager.login_message = 'Please log in to access this page.'
+login_manager.session_protection = "strong"
+
+# Set up logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 # User Model in main database
 class User(UserMixin, db.Model):
@@ -57,57 +77,271 @@ def log_access(action, patient_id=None):
 
 # Dictionary to store ward data
 wards_data = {}
+# Flag to indicate if data is being loaded
+is_loading_data = False
 
 def extract_patient_info(pdf_path):
     patient_data = {}
-    current_patient = None
-    current_info = []
-    
-    reader = PdfReader(pdf_path)
-    for page in reader.pages:
-        text = page.extract_text()
-        lines = text.split('\n')
+    try:
+        reader = PdfReader(pdf_path)
+        logger.debug(f"Processing PDF: {pdf_path} with {len(reader.pages)} pages")
         
-        for line in lines:
-            if line.startswith("Patient ID:"):
-                if current_patient:
-                    patient_data[current_patient] = {
-                        "info": "\n".join(current_info),
-                        "name": next((l.split(": ")[1] for l in current_info if l.startswith("Name:")), "Unknown")
-                    }
-                current_patient = line.split(": ")[1].strip()
-                current_info = [line]
-            else:
-                if current_patient:
-                    current_info.append(line)
+        # Process each page as a potential patient record
+        for page_num, page in enumerate(reader.pages):
+            text = page.extract_text()
+            lines = text.split('\n')
+            
+            # Initialize patient info for this page
+            patient_id = None
+            patient_name = None
+            patient_ward = None
+            patient_dob = None
+            care_notes = []
+            
+            # This flag will help us know what the next line contains
+            expecting_value = None
+            in_care_notes = False
+            care_notes_section_start = -1
+            
+            # Process each line
+            for i, line in enumerate(lines):
+                line = line.strip()
+                if not line:
+                    continue
+                
+                # Check for the page title (start of a patient record)
+                if line.startswith("Patient Record - Ward"):
+                    # Reset for new patient
+                    expecting_value = None
+                    in_care_notes = False
+                    continue
+                
+                # Check if we're in the care notes section
+                if line == "Continuous Care Notes":
+                    in_care_notes = True
+                    care_notes_section_start = i
+                    logger.debug(f"Found Care Notes section at line {i}")
+                    continue
+                    
+                # If we're expecting a specific value...
+                if expecting_value:
+                    if expecting_value == "Patient ID":
+                        patient_id = line
+                        logger.debug(f"Found Patient ID: {patient_id}")
+                    elif expecting_value == "Name":
+                        patient_name = line
+                        logger.debug(f"Found Patient Name: {patient_name}")
+                    elif expecting_value == "Ward":
+                        patient_ward = line
+                    elif expecting_value == "DOB":
+                        patient_dob = line
+                    
+                    expecting_value = None
+                    continue
+                
+                # Check for field labels
+                if line == "Patient ID:":
+                    expecting_value = "Patient ID"
+                elif line == "Name:":
+                    expecting_value = "Name"
+                elif line == "Ward:":
+                    expecting_value = "Ward"
+                elif line == "DOB:":
+                    expecting_value = "DOB"
+            
+            # Process care notes - we need special handling for the care notes section
+            if in_care_notes and care_notes_section_start > 0:
+                # Find the header row
+                header_row_idx = -1
+                for i in range(care_notes_section_start + 1, len(lines)):
+                    if lines[i].strip() == "Date & Time":
+                        header_row_idx = i
+                        break
+                
+                if header_row_idx > 0:
+                    # We should have the header row and the next two rows are "Staff Member" and "Notes"
+                    # After that, the actual data starts in groups of 3 lines (date, staff, note)
+                    data_start_idx = header_row_idx + 3
+                    
+                    # Process care notes in groups of 3 lines
+                    i = data_start_idx
+                    while i < len(lines) - 2:
+                        date_line = lines[i].strip()
+                        staff_line = lines[i + 1].strip()
+                        note_line = lines[i + 2].strip()
+                        
+                        if date_line and staff_line:  # Ensure we have at least date and staff
+                            care_notes.append({
+                                "date": date_line,
+                                "staff": staff_line,
+                                "note": note_line
+                            })
+                            logger.debug(f"Added care note: date={date_line}, staff={staff_line}, note={note_line}")
+                        
+                        i += 3  # Move to next group of 3 lines
+            
+            # If we found a patient ID and name, add to our data
+            if patient_id and patient_name:
+                patient_info = {
+                    "Name": patient_name,
+                    "Ward": patient_ward,
+                    "DOB": patient_dob
+                }
+                
+                # Filter out None values
+                patient_info = {k: v for k, v in patient_info.items() if v is not None}
+                
+                patient_data[patient_id] = {
+                    "info": patient_info,
+                    "name": patient_name,
+                    "vitals": "",
+                    "care_notes": care_notes
+                }
+                logger.debug(f"Added patient {patient_id}: {patient_name} with {len(care_notes)} care notes")
         
-        if current_patient:
-            patient_data[current_patient] = {
-                "info": "\n".join(current_info),
-                "name": next((l.split(": ")[1] for l in current_info if l.startswith("Name:")), "Unknown")
-            }
+        logger.debug(f"Extracted data for {len(patient_data)} patients")
+        return patient_data
     
-    return patient_data
+    except Exception as e:
+        logger.error(f"Error processing {pdf_path}: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return {}
 
-# Load all ward PDFs
-def load_ward_data():
-    global wards_data
-    wards_data.clear()
+def process_patient_data(info_lines):
+    demographics = {}
+    care_notes = []
+    in_care_notes = False
+    header_found = False
     
-    # Find all ward PDF files
-    ward_files = [f for f in os.listdir('.') if f.startswith('ward_') and f.endswith('_records.pdf')]
+    try:
+        for line in info_lines:
+            line = line.strip()
+            if not line:
+                continue
+            
+            # Check for care notes section
+            if "Continuous Care Notes" in line:
+                in_care_notes = True
+                logger.debug("Entering Care Notes section")
+                continue
+            
+            # Skip the header row of the care notes table
+            if in_care_notes and not header_found and "Date & Time" in line:
+                header_found = True
+                logger.debug("Found Care Notes header")
+                continue
+            
+            if not in_care_notes:
+                # Process demographics fields
+                fields = {
+                    "Patient ID:": "Patient ID",
+                    "Name:": "Name",
+                    "Ward:": "Ward",
+                    "DOB:": "DOB"
+                }
+                
+                for prefix, key in fields.items():
+                    if prefix in line:
+                        value = line.split(prefix, 1)[1].strip()
+                        demographics[key] = value
+                        logger.debug(f"Found {key}: {value}")
+            
+            elif in_care_notes and header_found:
+                # Process care notes - expecting date, staff member, and note
+                parts = [p.strip() for p in line.split("  ") if p.strip()]
+                if len(parts) >= 3:
+                    care_notes.append({
+                        "date": parts[0],
+                        "staff": parts[1],
+                        "note": " ".join(parts[2:])
+                    })
+                    logger.debug(f"Added care note: {care_notes[-1]}")
+                elif len(parts) == 2:
+                    care_notes.append({
+                        "date": parts[0],
+                        "staff": parts[1],
+                        "note": ""
+                    })
+                    logger.debug(f"Added care note: {care_notes[-1]}")
+        
+        # Ensure we have a name
+        if "Name" not in demographics:
+            demographics["Name"] = "Unknown"
+        
+        patient_data = {
+            "info": demographics,
+            "name": demographics.get("Name", "Unknown"),
+            "vitals": "",  # No vitals in the current PDF format
+            "care_notes": care_notes
+        }
+        logger.debug(f"Processed patient data: {patient_data}")
+        return patient_data
+    except Exception as e:
+        logger.error(f"Error processing patient data: {str(e)}")
+        return {
+            "info": {"Name": "Error Processing Patient"},
+            "name": "Error Processing Patient",
+            "vitals": "",
+            "care_notes": []
+        }
+
+# Get ward metadata without processing patient data
+def get_ward_metadata():
+    wards_meta = {}
+    ward_files = sorted([f for f in os.listdir('.') if f.startswith('ward_') and f.endswith('_records.pdf')])
     
     for pdf_filename in ward_files:
-        # Extract ward number from filename (ward_X_records.pdf)
         ward_num = pdf_filename.split('_')[1]
-        if os.path.exists(pdf_filename):
-            wards_data[ward_num] = {
-                "filename": pdf_filename,
-                "patients": extract_patient_info(pdf_filename)
-            }
+        wards_meta[ward_num] = {
+            "filename": pdf_filename,
+            "patients": {}  # Empty placeholder, will be filled on demand
+        }
+    
+    return wards_meta
 
-# Load ward data when the application starts
-load_ward_data()
+# Process a single ward PDF, with caching
+@lru_cache(maxsize=100)  # Cache more ward data
+def process_ward_pdf(pdf_filename):
+    logger.debug(f"Processing ward PDF: {pdf_filename}")
+    if os.path.exists(pdf_filename):
+        patient_info = extract_patient_info(pdf_filename)
+        logger.debug(f"Extracted patient info: {patient_info}")
+        return patient_info
+    logger.error(f"PDF file does not exist: {pdf_filename}")
+    return {}
+
+# Load a specific ward's data
+def load_specific_ward(ward_num):
+    global wards_data
+    
+    if ward_num in wards_data and wards_data[ward_num].get("patients"):
+        # Data already loaded
+        return
+    
+    if ward_num in wards_data:
+        pdf_filename = wards_data[ward_num]["filename"]
+        wards_data[ward_num]["patients"] = process_ward_pdf(pdf_filename)
+        logger.debug(f"Loaded ward {ward_num} with {len(wards_data[ward_num]['patients'])} patients")
+    else:
+        logger.error(f"Ward {ward_num} not found in ward metadata")
+
+def load_ward_data_background():
+    global wards_data, is_loading_data
+    
+    # First load metadata only (fast)
+    wards_data = get_ward_metadata()
+    is_loading_data = False
+    logger.debug(f"Loaded ward metadata for {len(wards_data)} wards")
+
+# Start with just the metadata
+def init_ward_data():
+    global wards_data, is_loading_data
+    is_loading_data = True
+    threading.Thread(target=load_ward_data_background).start()
+
+# Initialize with metadata
+init_ward_data()
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -117,12 +351,26 @@ def login():
         user = User.query.filter_by(username=username).first()
         
         if user and check_password_hash(user.password_hash, password):
-            login_user(user)
+            login_user(user, remember=True)  # Enable remember me
+            session.permanent = True  # Use permanent session
+            next_page = request.args.get('next')
             log_access('login')
-            return redirect(url_for('index'))
+            
+            # Only redirect to 'next' if it's a relative path (security measure)
+            if next_page and not next_page.startswith('/'):
+                next_page = None
+            return redirect(next_page or url_for('index'))
         
         flash('Invalid username or password')
     return render_template('login.html')
+
+@app.after_request
+def after_request(response):
+    # Ensure we have proper security headers
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    return response
 
 @app.route('/logout')
 @login_required
@@ -134,49 +382,142 @@ def logout():
 @app.route('/')
 @login_required
 def index():
-    load_ward_data()
+    global is_loading_data
     log_access('view_wards')
-    return render_template('index.html', wards=wards_data)
+    return render_template('index.html', wards=wards_data, is_loading=is_loading_data)
+
+@app.route('/loading-status')
+@login_required
+def loading_status():
+    return jsonify({"is_loading": is_loading_data})
 
 @app.route('/ward/<ward_num>')
 @login_required
 def ward(ward_num):
+    # Load this specific ward's data on demand
+    load_specific_ward(ward_num)
+    
     if ward_num in wards_data:
+        ward_info = wards_data[ward_num]
         log_access('view_ward', f'Ward {ward_num}')
         return render_template('ward.html', 
                             ward_num=ward_num, 
-                            ward_data=wards_data[ward_num],
-                            pdf_filename=wards_data[ward_num]["filename"])
+                            ward_data=ward_info,
+                            pdf_filename=ward_info["filename"])
     return "Ward not found", 404
 
 @app.route('/search/<ward_num>')
 @login_required
 def search(ward_num):
+    # Load this specific ward's data on demand
+    load_specific_ward(ward_num)
+    
     if ward_num not in wards_data:
         return jsonify([])
     
-    search_query = request.args.get('q', '')
+    search_query = request.args.get('q', '').strip().lower()
     ward_patients = wards_data[ward_num]["patients"]
-    results = [{"id": pid, "name": data["name"]} 
-              for pid, data in ward_patients.items() 
-              if search_query in pid]
+    
+    # If no search query, return all patients
+    if not search_query:
+        results = [{"id": pid, "name": data["name"]} 
+                  for pid, data in ward_patients.items()]
+    else:
+        # Search in both ID and name
+        results = [{"id": pid, "name": data["name"]} 
+                  for pid, data in ward_patients.items() 
+                  if search_query in pid.lower() or 
+                     search_query in data["name"].lower()]
+    
+    return jsonify(results)
+
+@app.route('/search_wards')
+@login_required
+def search_wards():
+    query = request.args.get('q', '').lower()
+    results = []
+    
+    for ward_num, ward_info in wards_data.items():
+        if (query in ward_num or 
+            query in ward_info['filename'].lower()):
+            # Get patient count if available, otherwise zero
+            patient_count = len(ward_info.get('patients', {}))
+            results.append({
+                'ward_num': ward_num,
+                'filename': ward_info['filename'],
+                'patient_count': patient_count
+            })
+    
     return jsonify(results)
 
 @app.route('/patient/<patient_id>')
 @login_required
 def patient(patient_id):
+    # Try to find which ward contains this patient
+    ward_num_found = None
     for ward_num, ward_info in wards_data.items():
-        if patient_id in ward_info["patients"]:
-            patient_info = ward_info["patients"][patient_id]
-            log_access('view_patient', patient_id)
-            return render_template('patient.html',
-                                patient_id=patient_id,
-                                patient_info=patient_info["info"],
-                                patient_name=patient_info["name"],
-                                ward_num=ward_num,
-                                pdf_filename=ward_info["filename"])
+        # If patients are loaded and contain this ID
+        if ward_info.get("patients") and patient_id in ward_info["patients"]:
+            ward_num_found = ward_num
+            break
+        
+    # If we didn't find it, we may need to load ward data
+    if not ward_num_found:
+        # This is inefficient but necessary if we don't know which ward has the patient
+        for ward_num in wards_data:
+            load_specific_ward(ward_num)
+            if patient_id in wards_data[ward_num]["patients"]:
+                ward_num_found = ward_num
+                break
+    
+    if ward_num_found:
+        patient_data = wards_data[ward_num_found]["patients"][patient_id]
+        log_access('view_patient', patient_id)
+        return render_template('patient.html',
+                            patient_id=patient_id,
+                            patient_info_dict=patient_data["info"],
+                            vitals=patient_data.get("vitals", ""),
+                            care_notes=patient_data.get("care_notes", []),
+                            ward_num=ward_num_found,
+                            pdf_filename=wards_data[ward_num_found]["filename"])
     
     return "Patient not found", 404
+
+@app.route('/pdf/<patient_id>')
+@login_required
+def serve_patient_pdf(patient_id):
+    # Try to find which ward contains this patient
+    ward_num_found = None
+    for ward_num, ward_info in wards_data.items():
+        if ward_info.get("patients") and patient_id in ward_info["patients"]:
+            ward_num_found = ward_num
+            break
+    
+    if not ward_num_found:
+        # This is inefficient but necessary if we don't know which ward has the patient
+        for ward_num in wards_data:
+            load_specific_ward(ward_num)
+            if ward_num in wards_data and wards_data[ward_num].get("patients") and patient_id in wards_data[ward_num]["patients"]:
+                ward_num_found = ward_num
+                break
+    
+    if ward_num_found:
+        # Log this access
+        log_access('view_pdf', patient_id)
+        
+        # Get the PDF filename
+        pdf_filename = wards_data[ward_num_found]["filename"]
+        
+        # Return a response with instructions to create a proper PDF viewer
+        return """
+        <div style="padding: 20px; font-family: Arial, sans-serif; text-align: center;">
+            <h2>PDF Viewer Not Available</h2>
+            <p>Individual PDF extraction for patient records is not implemented in this version.</p>
+            <p>Patient data is displayed in the main patient view.</p>
+        </div>
+        """
+    
+    return "Patient PDF not found", 404
 
 @app.route('/audit-log')
 @login_required
@@ -187,6 +528,22 @@ def view_audit_log():
     
     logs = AuditLog.query.order_by(AuditLog.timestamp.desc()).all()
     return render_template('audit_log.html', logs=logs)
+
+@app.route('/ward_patient_count/<ward_num>')
+@login_required
+def ward_patient_count(ward_num):
+    # Check if we already have the ward data loaded
+    if ward_num in wards_data and wards_data[ward_num].get("patients"):
+        count = len(wards_data[ward_num]["patients"])
+    else:
+        # Load ward data if not already loaded
+        load_specific_ward(ward_num)
+        if ward_num in wards_data and wards_data[ward_num].get("patients"):
+            count = len(wards_data[ward_num]["patients"])
+        else:
+            count = 0
+    
+    return jsonify({"ward": ward_num, "count": count})
 
 if __name__ == '__main__':
     with app.app_context():
@@ -213,4 +570,15 @@ if __name__ == '__main__':
             db.session.add(test_user)
             
         db.session.commit()
-    app.run(debug=True)
+
+    # Try ports 5000-5010 until we find an available one
+    for port in range(5000, 5011):
+        try:
+            app.run(host='0.0.0.0', port=port, debug=True)
+            break
+        except OSError as e:
+            if e.errno == 48:  # Address already in use
+                print(f"Port {port} is in use, trying next port...")
+                continue
+            else:
+                raise  # Re-raise other OSErrors
