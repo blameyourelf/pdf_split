@@ -288,8 +288,20 @@
                 <i class="fas fa-notes-medical"></i>
                 Continuous Care Notes
             </h3>
-            
-            <table class="care-notes-table">
+
+            <!-- Add search box -->
+            <div class="field mb-4">
+                <div class="control has-icons-left">
+                    <input class="input" type="text" id="care-notes-search" 
+                           placeholder="Search care notes..." 
+                           oninput="searchCareNotes()">
+                    <span class="icon is-left">
+                        <i class="fas fa-search"></i>
+                    </span>
+                </div>
+            </div>
+
+            <table class="care-notes-table" id="care-notes-table">
                 <thead>
                     <tr>
                         <th>Date & Time</th>
@@ -309,5 +321,31 @@
             </table>
         </div>
     </div>
+
+    <script>
+        function searchCareNotes() {
+            const searchTerm = document.getElementById('care-notes-search').value.toLowerCase();
+            const table = document.getElementById('care-notes-table');
+            const rows = table.getElementsByTagName('tr');
+
+            // Start from 1 to skip header row
+            for (let i = 1; i < rows.length; i++) {
+                const row = rows[i];
+                const cells = row.getElementsByTagName('td');
+                let foundMatch = false;
+
+                // Search through all cells in the row
+                for (let cell of cells) {
+                    if (cell.textContent.toLowerCase().includes(searchTerm)) {
+                        foundMatch = true;
+                        break;
+                    }
+                }
+
+                // Show/hide row based on search
+                row.style.display = foundMatch || searchTerm === '' ? '' : 'none';
+            }
+        }
+    </script>
 </body>
 </html>
