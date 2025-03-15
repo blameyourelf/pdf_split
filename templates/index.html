@@ -335,6 +335,12 @@
                 Welcome, {{ current_user.username }}
             </div>
             <div class="user-nav">
+                <a href="{{ url_for('profile') }}" class="button is-light mr-2">
+                    <span class="icon">
+                        <i class="fas fa-hospital"></i>
+                    </span>
+                    <span>Choose Default Ward</span>
+                </a>
                 {% if current_user.role == 'admin' %}
                 <a href="{{ url_for('view_audit_log') }}" class="audit-link">
                     <i class="fas fa-history"></i>
@@ -381,6 +387,17 @@
             </form>
         </div>
         
+        {% if current_user.default_ward and not show_all %}
+        <div class="has-text-centered mb-4">
+            <a href="/?show_all=1" class="button is-info is-light">
+                <span class="icon">
+                    <i class="fas fa-list"></i>
+                </span>
+                <span>Show All Wards</span>
+            </a>
+        </div>
+        {% endif %}
+
         <div class="ward-grid">
             {% for ward_num, ward_info in wards.items() %}
             <a href="/ward/{{ ward_num }}" class="ward-card" data-ward="{{ ward_num }}">

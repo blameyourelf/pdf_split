@@ -50,6 +50,7 @@ class User(UserMixin, db.Model):
     username = db.Column(db.String(80), unique=True, nullable=False)
     password_hash = db.Column(db.String(120), nullable=False)
     role = db.Column(db.String(20), nullable=False, default='user')
+    default_ward = db.Column(db.String(50), nullable=True)
 
 # Audit Log Model in separate database
 class AuditLog(db.Model):
@@ -428,14 +429,39 @@ def logout():
 @app.route('/')
 @login_required
 def index():
-    global is_loading_data
-    log_access('view_wards')
-    return render_template('index.html', wards=wards_data, is_loading=is_loading_data)
+    # Explicitly cast to boolean and check for '1'
+    show_all = request.args.get('show_all') == '1'
+    
+    # Only redirect to default ward if show_all is False AND user has a default ward
+    if current_user.default_ward and not show_all:
+        return redirect(url_for('ward', ward_num=current_user.default_ward))
+    
+    # If show_all is True, or user has no default ward, show all wards
+    sorted_wards = {}
+    for ward_id, info in sorted(wards_data.items(), key=lambda x: x[1]['display_name'].lower()):
+        sorted_wards[ward_id] = info
+    
+    return render_template('index.html', wards=sorted_wards, show_all=show_all)
 
-@app.route('/loading-status')
+@app.route('/profile', methods=['GET', 'POST'])
 @login_required
-def loading_status():
-    return jsonify({"is_loading": is_loading_data})
+def profile():
+    if request.method == 'POST':
+        default_ward = request.form.get('default_ward')
+        
+        # Update user's default ward
+        current_user.default_ward = default_ward
+        db.session.commit()
+        
+        flash('Profile updated successfully!', 'success')
+        return redirect(url_for('profile'))
+    
+    # Sort wards alphabetically by display_name for the dropdown
+    sorted_wards = {}
+    for ward_id, info in sorted(wards_data.items(), key=lambda x: x[1]['display_name'].lower()):
+        sorted_wards[ward_id] = info
+    
+    return render_template('profile.html', wards=sorted_wards, current_ward=current_user.default_ward)
 
 @app.route('/ward/<ward_num>')
 @login_required
@@ -724,9 +750,23 @@ def debug_ward(ward_num):
 
 if __name__ == '__main__':
     with app.app_context():
+        db.create_all()
+        
+        # Check if default_ward column exists in user table
+        inspector = db.inspect(db.engine)
+        columns = [col['name'] for col in inspector.get_columns('user')]
+        if 'default_ward' not in columns:
+            db.engine.execute('ALTER TABLE user ADD COLUMN default_ward VARCHAR(50)')
+        
         # Create both databases and tables
         db.create_all()
         db.create_all(bind=['audit'])
+        
+        # Add default_ward column if it doesn't exist
+        inspector = db.inspect(db.engine)
+        columns = [col['name'] for col in inspector.get_columns('user')]
+        if 'default_ward' not in columns:
+            db.engine.execute('ALTER TABLE user ADD COLUMN default_ward VARCHAR(50)')
         
         # Create default admin user if not exists
         if not User.query.filter_by(username='admin').first():
