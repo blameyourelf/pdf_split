@@ -223,6 +223,12 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+        /* Add this new style for highlighted text */
+        .highlight {
+            background-color: #fef08a;
+            padding: 0 2px;
+            border-radius: 2px;
+        }
     </style>
 </head>
 <body>
@@ -379,11 +385,20 @@
                 const cells = row.getElementsByTagName('td');
                 let foundMatch = false;
 
+                // Remove existing highlights
+                row.innerHTML = row.innerHTML.replace(/<mark class="highlight">/g, '').replace(/<\/mark>/g, '');
+
                 // Search through all cells in the row
                 for (let cell of cells) {
-                    if (cell.textContent.toLowerCase().includes(searchTerm)) {
+                    const text = cell.textContent;
+                    if (text.toLowerCase().includes(searchTerm)) {
                         foundMatch = true;
-                        break;
+                        if (searchTerm) {
+                            // Create a regex that matches the search term (case insensitive)
+                            const regex = new RegExp(`(${searchTerm})`, 'gi');
+                            // Replace matches with highlighted version
+                            cell.innerHTML = text.replace(regex, '<mark class="highlight">$1</mark>');
+                        }
                     }
                 }
 
