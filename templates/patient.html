@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.9.3/css/bulma.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <style>
         body {
             padding: 20px;
@@ -265,6 +266,9 @@
             </div>
             <h1 class="title">Patient Record</h1>
             <p class="subtitle">{{ pdf_filename }}</p>
+            <p class="subtitle" style="font-size: 0.9rem; color: #718096;">
+                Snapshot taken at: {{ pdf_creation_time }}
+            </p>
         </div>
 
         <div class="patient-card">
@@ -287,6 +291,12 @@
             <h3 class="section-title">
                 <i class="fas fa-notes-medical"></i>
                 Continuous Care Notes
+                <button onclick="showAddNoteModal()" class="button is-primary is-small ml-4">
+                    <span class="icon is-small">
+                        <i class="fas fa-plus"></i>
+                    </span>
+                    <span>Add Note</span>
+                </button>
             </h3>
 
             <!-- Add search box -->
@@ -312,13 +322,48 @@
                 <tbody>
                     {% for note in care_notes %}
                     <tr>
-                        <td>{{ note.date }}</td>
-                        <td>{{ note.staff }}</td>
+                        <td>
+                            {% if note.timestamp %}
+                                {{ note.timestamp }}
+                            {% elif note.date %}
+                                {{ note.date }}
+                            {% endif %}
+                            {% if note.is_new %}
+                                <span style="background: #d1fae5; color: #047857; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem;">NEW</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ note.staff if note.staff is defined else 'N/A' }}</td>
                         <td>{{ note.note }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
+        </div>
+    </div>
+
+    <!-- Add Note Modal -->
+    <div class="modal" id="add-note-modal">
+        <div class="modal-background"></div>
+        <div class="modal-card">
+            <header class="modal-card-head">
+                <p class="modal-card-title">Add Care Note</p>
+                <button class="delete" aria-label="close" onclick="closeAddNoteModal()"></button>
+            </header>
+            <section class="modal-card-body">
+                <form id="note-form" method="POST" action="/add_care_note/{{ patient_id }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="field">
+                        <label class="label">Note</label>
+                        <div class="control">
+                            <textarea class="textarea" id="note-text" name="note" placeholder="Enter care note..."></textarea>
+                        </div>
+                    </div>
+                    <footer class="modal-card-foot">
+                        <button class="button is-primary" type="submit">Save Note</button>
+                        <button class="button" onclick="closeAddNoteModal()">Cancel</button>
+                    </footer>
+                </form>
+            </section>
         </div>
     </div>
 
@@ -345,6 +390,19 @@
                 // Show/hide row based on search
                 row.style.display = foundMatch || searchTerm === '' ? '' : 'none';
             }
+        }
+
+        function showAddNoteModal() {
+            document.getElementById('add-note-modal').classList.add('is-active');
+            // Focus the textarea after modal is shown
+            setTimeout(() => {
+                document.getElementById('note-text').focus();
+            }, 100);
+        }
+
+        function closeAddNoteModal() {
+            document.getElementById('add-note-modal').classList.remove('is-active');
+            document.getElementById('note-text').value = '';
         }
     </script>
 </body>

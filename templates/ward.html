@@ -237,6 +237,12 @@
                 Welcome, {{ current_user.username }}
             </div>
             <div class="user-nav">
+                <a href="{{ url_for('my_shift_notes') }}" class="button is-info is-light mr-2">
+                    <span class="icon">
+                        <i class="fas fa-clipboard-list"></i>
+                    </span>
+                    <span>View My Shift Notes</span>
+                </a>
                 {% if current_user.role == 'admin' %}
                 <a href="{{ url_for('view_audit_log') }}" class="audit-link">
                     <i class="fas fa-history"></i>
@@ -262,6 +268,9 @@
                     {% endif %}
                 </h1>
                 <p class="subtitle">{{ pdf_filename }}</p>
+                <p class="subtitle" style="font-size: 0.9rem; color: #718096;">
+                    Snapshot taken at: {{ pdf_creation_time }}
+                </p>
             </div>
             <a href="/?show_all=1" class="back-button">
                 <i class="fas fa-th-large"></i>

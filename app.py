@@ -5,14 +5,15 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from PyPDF2 import PdfReader
 from flask_wtf.csrf import CSRFProtect
 import os
+import threading
+import click
 from datetime import datetime, timedelta
 from sqlalchemy import create_engine
 from sqlalchemy.orm import scoped_session, sessionmaker
 from functools import lru_cache
 import re
-import logging
-import threading
 from urllib.parse import quote, unquote
+from flask.cli import with_appcontext
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-super-secret-key-8712'  # Change this in production
@@ -39,10 +40,6 @@ login_manager.init_app(app)
 login_manager.login_view = 'login'
 login_manager.login_message = 'Please log in to access this page.'
 login_manager.session_protection = "strong"
-
-# Set up logging
-logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger(__name__)
 
 # User Model in main database
 class User(UserMixin, db.Model):
@@ -78,6 +75,23 @@ class RecentlyViewedPatient(db.Model):
             'viewed_at': self.viewed_at.strftime('%Y-%m-%d %H:%M:%S')
         }
 
+class CareNote(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    patient_id = db.Column(db.String(50), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    note = db.Column(db.Text, nullable=False)
+    timestamp = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    def to_dict(self):
+        # Include user_id so we can fetch the staff member name later.
+        return {
+            'id': self.id,
+            'patient_id': self.patient_id,
+            'note': self.note,
+            'timestamp': self.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
+            'user_id': self.user_id
+        }
+
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
@@ -91,7 +105,14 @@ def log_access(action, patient_id=None):
             patient_id=patient_id
         )
         db.session.add(log)
-        db.session.commit()
+        try:
+            # Using a separate commit to ensure the audit record is saved
+            db.session.commit()
+            print(f"Audit log entry created: {action} for {patient_id}")
+        except Exception as e:
+            # If there's an error, rollback but continue (don't prevent the main action)
+            db.session.rollback()
+            print(f"Error logging audit entry: {str(e)}")
 
 # Dictionary to store ward data
 wards_data = {}
@@ -102,7 +123,6 @@ def extract_patient_info(pdf_path):
     patient_data = {}
     try:
         reader = PdfReader(pdf_path)
-        logger.debug(f"Processing PDF: {pdf_path} with {len(reader.pages)} pages")
         
         # Process each page as a potential patient record
         for page_num, page in enumerate(reader.pages):
@@ -138,17 +158,14 @@ def extract_patient_info(pdf_path):
                 if line == "Continuous Care Notes":
                     in_care_notes = True
                     care_notes_section_start = i
-                    logger.debug(f"Found Care Notes section at line {i}")
                     continue
                     
                 # If we're expecting a specific value...
                 if expecting_value:
                     if expecting_value == "Patient ID":
                         patient_id = line
-                        logger.debug(f"Found Patient ID: {patient_id}")
                     elif expecting_value == "Name":
                         patient_name = line
-                        logger.debug(f"Found Patient Name: {patient_name}")
                     elif expecting_value == "Ward":
                         patient_ward = line
                     elif expecting_value == "DOB":
@@ -194,7 +211,6 @@ def extract_patient_info(pdf_path):
                                 "staff": staff_line,
                                 "note": note_line
                             })
-                            logger.debug(f"Added care note: date={date_line}, staff={staff_line}, note={note_line}")
                         
                         i += 3  # Move to next group of 3 lines
             
@@ -215,15 +231,10 @@ def extract_patient_info(pdf_path):
                     "vitals": "",
                     "care_notes": care_notes
                 }
-                logger.debug(f"Added patient {patient_id}: {patient_name} with {len(care_notes)} care notes")
         
-        logger.debug(f"Extracted data for {len(patient_data)} patients")
         return patient_data
     
     except Exception as e:
-        logger.error(f"Error processing {pdf_path}: {str(e)}")
-        import traceback
-        logger.error(traceback.format_exc())
         return {}
 
 def process_patient_data(info_lines):
@@ -241,13 +252,11 @@ def process_patient_data(info_lines):
             # Check for care notes section
             if "Continuous Care Notes" in line:
                 in_care_notes = True
-                logger.debug("Entering Care Notes section")
                 continue
             
             # Skip the header row of the care notes table
             if in_care_notes and not header_found and "Date & Time" in line:
                 header_found = True
-                logger.debug("Found Care Notes header")
                 continue
             
             if not in_care_notes:
@@ -263,7 +272,6 @@ def process_patient_data(info_lines):
                     if prefix in line:
                         value = line.split(prefix, 1)[1].strip()
                         demographics[key] = value
-                        logger.debug(f"Found {key}: {value}")
             
             elif in_care_notes and header_found:
                 # Process care notes - expecting date, staff member, and note
@@ -274,14 +282,12 @@ def process_patient_data(info_lines):
                         "staff": parts[1],
                         "note": " ".join(parts[2:])
                     })
-                    logger.debug(f"Added care note: {care_notes[-1]}")
                 elif len(parts) == 2:
                     care_notes.append({
                         "date": parts[0],
                         "staff": parts[1],
                         "note": ""
                     })
-                    logger.debug(f"Added care note: {care_notes[-1]}")
         
         # Ensure we have a name
         if "Name" not in demographics:
@@ -293,10 +299,8 @@ def process_patient_data(info_lines):
             "vitals": "",  # No vitals in the current PDF format
             "care_notes": care_notes
         }
-        logger.debug(f"Processed patient data: {patient_data}")
         return patient_data
     except Exception as e:
-        logger.error(f"Error processing patient data: {str(e)}")
         return {
             "info": {"Name": "Error Processing Patient"},
             "name": "Error Processing Patient",
@@ -339,39 +343,30 @@ def get_ward_metadata():
 # Process a single ward PDF, with caching
 @lru_cache(maxsize=100)  # Cache more ward data
 def process_ward_pdf(pdf_filename):
-    logger.debug(f"Processing ward PDF: {pdf_filename}")
     if os.path.exists(pdf_filename):
         patient_info = extract_patient_info(pdf_filename)
-        logger.debug(f"Extracted patient info: {patient_info}")
         return patient_info
-    logger.error(f"PDF file does not exist: {pdf_filename}")
     return {}
 
 # Load a specific ward's data
 def load_specific_ward(ward_num):
     global wards_data
     
-    logger.debug(f"Attempting to load ward: {ward_num}")
-    
     # Try to clear any potentially cached data for problematic wards
     if ward_num in wards_data and not wards_data[ward_num].get("patients"):
-        logger.debug(f"Clearing cache for ward: {ward_num}")
         # Force clear the cache for this specific ward
         process_ward_pdf.cache_clear()
     
     if ward_num in wards_data and wards_data[ward_num].get("patients"):
-        logger.debug(f"Ward {ward_num} data already loaded")
         # Data already loaded
         return
     
     if ward_num in wards_data:
         pdf_filename = wards_data[ward_num]["filename"]
-        logger.debug(f"Loading ward data for {ward_num} from {pdf_filename}")
         patient_data = process_ward_pdf(pdf_filename)
         wards_data[ward_num]["patients"] = patient_data
-        logger.debug(f"Loaded ward {ward_num} with {len(patient_data)} patients")
     else:
-        logger.error(f"Ward {ward_num} not found in ward metadata")
+        pass
 
 def load_ward_data_background():
     global wards_data, is_loading_data
@@ -379,7 +374,6 @@ def load_ward_data_background():
     # First load metadata only (fast)
     wards_data = get_ward_metadata()
     is_loading_data = False
-    logger.debug(f"Loaded ward metadata for {len(wards_data)} wards")
 
 # Start with just the metadata
 def init_ward_data():
@@ -423,6 +417,8 @@ def after_request(response):
 @login_required
 def logout():
     log_access('logout')
+    # Clear any existing flash messages before logging out
+    session.pop('_flashes', None)
     logout_user()
     return redirect(url_for('login'))
 
@@ -466,19 +462,21 @@ def profile():
 @app.route('/ward/<ward_num>')
 @login_required
 def ward(ward_num):
-    # URL decode the ward_num to handle special characters
+    # URL decode ward_num and load data
     ward_num = unquote(ward_num)
-    
-    # Load this specific ward's data on demand
     load_specific_ward(ward_num)
-    
     if ward_num in wards_data:
         ward_info = wards_data[ward_num]
         log_access('view_ward', f'Ward {ward_num}')
+        # Get PDF creation (modification) time
+        import os
+        pdf_mtime = os.path.getmtime(ward_info["filename"])
+        pdf_creation_time = datetime.fromtimestamp(pdf_mtime).strftime("%Y-%m-%d %H:%M:%S")
         return render_template('ward.html', 
-                            ward_num=ward_num, 
-                            ward_data=ward_info,
-                            pdf_filename=ward_info["filename"])
+                               ward_num=ward_num,
+                               ward_data=ward_info,
+                               pdf_filename=ward_info["filename"],
+                               pdf_creation_time=pdf_creation_time)
     return "Ward not found", 404
 
 @app.route('/search/<ward_num>')
@@ -491,16 +489,10 @@ def search(ward_num):
     load_specific_ward(ward_num)
     
     if ward_num not in wards_data:
-        logger.error(f"Ward {ward_num} not found in wards_data")
         return jsonify([])
     
     search_query = request.args.get('q', '').strip().lower()
     ward_patients = wards_data[ward_num].get("patients", {})
-    
-    # Debug logging to track what's happening
-    logger.debug(f"Search in ward {ward_num}: {len(ward_patients)} patients found in ward data")
-    if not ward_patients:
-        logger.debug(f"Patient data for ward {ward_num} appears empty")
     
     # If no search query, return all patients
     if not search_query:
@@ -513,7 +505,6 @@ def search(ward_num):
                   if search_query in pid.lower() or 
                      search_query in data["name"].lower()]
     
-    logger.debug(f"Search results count: {len(results)}")
     return jsonify(results)
 
 @app.route('/search_wards')
@@ -559,28 +550,22 @@ def search_wards():
 @app.route('/patient/<patient_id>')
 @login_required
 def patient(patient_id):
-    # Try to find which ward contains this patient
+    # Find ward for this patient
     ward_num_found = None
     for ward_num, ward_info in wards_data.items():
-        # If patients are loaded and contain this ID
         if ward_info.get("patients") and patient_id in ward_info["patients"]:
             ward_num_found = ward_num
             break
-        
-    # If we didn't find it, we may need to load ward data
     if not ward_num_found:
-        # This is inefficient but necessary if we don't know which ward has the patient
         for ward_num in wards_data:
             load_specific_ward(ward_num)
             if patient_id in wards_data[ward_num]["patients"]:
                 ward_num_found = ward_num
                 break
-    
     if ward_num_found:
         patient_data = wards_data[ward_num_found]["patients"][patient_id]
         log_access('view_patient', patient_id)
-        
-        # Add to recently viewed
+        # Add recently viewed record
         recent = RecentlyViewedPatient(
             user_id=current_user.id,
             patient_id=patient_id,
@@ -588,24 +573,43 @@ def patient(patient_id):
             patient_name=patient_data["name"]
         )
         db.session.add(recent)
-        
-        # Keep only last 10 viewed patients per user
         older_views = RecentlyViewedPatient.query.filter_by(user_id=current_user.id)\
             .order_by(RecentlyViewedPatient.viewed_at.desc())\
             .offset(10).all()
         for old in older_views:
             db.session.delete(old)
-            
         db.session.commit()
+
+        # Get PDF care notes from snapshot
+        pdf_notes = patient_data.get("care_notes", [])
+        # Get new notes from the database
+        db_notes = [n.to_dict() for n in CareNote.query.filter_by(patient_id=patient_id).all()]
+        for note in db_notes:
+            user = User.query.get(note['user_id'])
+            note['staff'] = user.username if user else 'Unknown'
+            note['is_new'] = True
+        # Combine and sort notes (newest first)
+        combined = pdf_notes + db_notes
+        # Use "timestamp" if available; otherwise use "date" from PDF notes
+        combined.sort(key=lambda n: n.get('timestamp') or n.get('date', ''), reverse=True)
+        
+        # Also get PDF file creation time
+        import os
+        ward_info = wards_data[ward_num_found]
+        pdf_mtime = os.path.getmtime(ward_info["filename"])
+        pdf_creation_time = datetime.fromtimestamp(pdf_mtime).strftime("%Y-%m-%d %H:%M:%S")
+        
+        if 'care_note_success' in session:
+            flash(session.pop('care_note_success'), 'success')
         
         return render_template('patient.html',
-                            patient_id=patient_id,
-                            patient_info_dict=patient_data["info"],
-                            vitals=patient_data.get("vitals", ""),
-                            care_notes=patient_data.get("care_notes", []),
-                            ward_num=ward_num_found,
-                            pdf_filename=wards_data[ward_num_found]["filename"])
-    
+                               patient_id=patient_id,
+                               patient_info_dict=patient_data["info"],
+                               vitals=patient_data.get("vitals", ""),
+                               care_notes=combined,
+                               ward_num=ward_num_found,
+                               pdf_filename=ward_info["filename"],
+                               pdf_creation_time=pdf_creation_time)
     return "Patient not found", 404
 
 @app.route('/pdf/<patient_id>')
@@ -676,77 +680,122 @@ def ward_patient_count(ward_num):
 @app.route('/recent-patients')
 @login_required
 def recent_patients():
-    recents = RecentlyViewedPatient.query\
+    # First get all recent views
+    all_recents = RecentlyViewedPatient.query\
         .filter_by(user_id=current_user.id)\
         .order_by(RecentlyViewedPatient.viewed_at.desc())\
-        .limit(10)\
         .all()
-    return jsonify([r.to_dict() for r in recents])
+    
+    # Keep track of patient IDs we've seen to avoid duplicates
+    seen_patients = set()
+    unique_recents = []
+    
+    # Only add each patient once (the most recent view)
+    for recent in all_recents:
+        if recent.patient_id not in seen_patients:
+            unique_recents.append(recent)
+            seen_patients.add(recent.patient_id)
+            
+            # Stop once we have 10 unique patients
+            if len(unique_recents) >= 10:
+                break
+    
+    return jsonify([r.to_dict() for r in unique_recents])
 
-@app.route('/debug_ward/<ward_num>')
+from flask_wtf.csrf import validate_csrf
+
+@app.route('/add_care_note/<patient_id>', methods=['POST'])
 @login_required
-def debug_ward(ward_num):
-    # URL decode the ward_num to handle special characters
-    ward_num = unquote(ward_num)
-    
-    if ward_num in wards_data:
-        pdf_filename = wards_data[ward_num]["filename"]
-        logger.debug(f"Debugging ward {ward_num}, filename: {pdf_filename}")
+def add_care_note(patient_id):
+    try:
+        note_text = request.form.get('note')
+        if not note_text:
+            return jsonify({'error': 'Note text is required'}), 400
         
-        # Check if the file exists
-        file_exists = os.path.exists(pdf_filename)
-        logger.debug(f"File exists: {file_exists}")
+        note = CareNote(
+            patient_id=patient_id,
+            user_id=current_user.id,
+            note=note_text
+        )
         
-        if file_exists:
-            # Try to read the file directly
-            try:
-                reader = PdfReader(pdf_filename)
-                page_count = len(reader.pages)
-                logger.debug(f"PDF has {page_count} pages")
-                
-                # Try to extract text from the first page
-                first_page_text = reader.pages[0].extract_text()
-                text_sample = first_page_text[:100] + "..." if len(first_page_text) > 100 else first_page_text
-                logger.debug(f"First page text sample: {text_sample}")
-                
-                # Process the PDF using our existing function
-                patient_data = process_ward_pdf(pdf_filename)
-                patient_count = len(patient_data)
-                logger.debug(f"Extracted {patient_count} patients")
-                
-                return jsonify({
-                    "ward": ward_num,
-                    "filename": pdf_filename,
-                    "file_exists": file_exists,
-                    "page_count": page_count,
-                    "patient_count": patient_count,
-                    "text_sample": text_sample,
-                    "success": True
-                })
-            except Exception as e:
-                logger.error(f"Error debugging ward {ward_num}: {str(e)}")
-                import traceback
-                logger.error(traceback.format_exc())
-                return jsonify({
-                    "ward": ward_num,
-                    "filename": pdf_filename, 
-                    "file_exists": file_exists,
-                    "error": str(e),
-                    "success": False
-                })
-        else:
-            return jsonify({
-                "ward": ward_num,
-                "filename": pdf_filename,
-                "file_exists": False,
-                "success": False
-            })
+        # Add and save the care note
+        db.session.add(note)
+        db.session.commit()
+        
+        # Add audit log entry
+        audit_log = AuditLog(
+            user_id=current_user.id,
+            username=current_user.username,  
+            action='add_note',
+            patient_id=patient_id
+        )
+        db.session.add(audit_log)
+        db.session.commit()
+        
+        # Use session-based flash instead of regular flash
+        session['care_note_success'] = 'Note added successfully!'
+        return redirect(url_for('patient', patient_id=patient_id))
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/my_shift_notes')
+@login_required
+def my_shift_notes():
+    # Get notes from last 12 hours
+    cutoff = datetime.utcnow() - timedelta(hours=12)
+    notes = CareNote.query\
+        .filter(CareNote.user_id == current_user.id)\
+        .filter(CareNote.timestamp >= cutoff)\
+        .order_by(CareNote.timestamp.desc())\
+        .all()
     
-    return jsonify({
-        "ward": ward_num,
-        "error": "Ward not found in data",
-        "success": False
-    })
+    # Get patient names for the notes
+    notes_with_names = []
+    for note in notes:
+        patient_name = "Unknown"
+        ward_num = None
+        
+        # Find patient info
+        for ward in wards_data.values():
+            if ward.get("patients") and note.patient_id in ward["patients"]:
+                patient_name = ward["patients"][note.patient_id]["name"]
+                ward_num = ward.get("display_name")
+                break
+        
+        notes_with_names.append({
+            **note.to_dict(),
+            'patient_name': patient_name,
+            'ward': ward_num
+        })
+            
+    return render_template('shift_notes.html', notes=notes_with_names)
+
+@app.cli.command('init-carenotes')
+def init_carenotes():
+    """Initialize the care notes table."""
+    with app.app_context():
+        db.create_all()  # This will create any missing tables        
+        print("Care notes table created successfully.")
+
+@app.cli.command('create-carenotes')
+def create_carenotes():
+    """Create the care notes table."""
+    db.create_all()    
+    click.echo('Care notes table has been created.')
+
+def init_db():
+    with app.app_context():
+        db.create_all()
+
+@click.command('init-db')
+@with_appcontext
+def init_db_command():
+    """Initialize the database (creates tables if missing)."""
+    db.create_all()
+    click.echo('Database initialized.')
+
+app.cli.add_command(init_db_command)
 
 if __name__ == '__main__':
     with app.app_context():
@@ -785,7 +834,7 @@ if __name__ == '__main__':
                 role='user'
             )
             db.session.add(test_user)
-            
+
         db.session.commit()
 
     # Try ports 5000-5010 until we find an available one

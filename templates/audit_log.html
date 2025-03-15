@@ -96,6 +96,10 @@
             background-color: #fff5f5;
             color: #c53030;
         }
+        .action-badge.add-note {
+            background-color: #fefcbf;
+            color: #d69e2e;
+        }
     </style>
 </head>
 <body>
@@ -127,11 +131,22 @@
                         <td>{{ log.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
                         <td>{{ log.username }}</td>
                         <td>
-                            <span class="action-badge {{ 'login' if log.action == 'login' else 'logout' if log.action == 'logout' else 'view' }}">
+                            <span class="action-badge 
+                                {% if log.action == 'login' %}
+                                    login
+                                {% elif log.action == 'logout' %}
+                                    logout
+                                {% elif log.action == 'add_note' %}
+                                    add-note
+                                {% else %}
+                                    view
+                                {% endif %}">
                                 {% if log.action == 'login' %}
                                     <i class="fas fa-sign-in-alt"></i>
                                 {% elif log.action == 'logout' %}
                                     <i class="fas fa-sign-out-alt"></i>
+                                {% elif log.action == 'add_note' %}
+                                    <i class="fas fa-plus"></i>
                                 {% else %}
                                     <i class="fas fa-eye"></i>
                                 {% endif %}
