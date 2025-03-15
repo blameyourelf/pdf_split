@@ -12,6 +12,7 @@ from functools import lru_cache
 import re
 import logging
 import threading
+from urllib.parse import quote, unquote
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-super-secret-key-8712'  # Change this in production
@@ -59,6 +60,22 @@ class AuditLog(db.Model):
     action = db.Column(db.String(50), nullable=False)
     patient_id = db.Column(db.String(50), nullable=True)
     timestamp = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+class RecentlyViewedPatient(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    patient_id = db.Column(db.String(50), nullable=False)
+    ward_num = db.Column(db.String(50), nullable=False)
+    patient_name = db.Column(db.String(100), nullable=False)
+    viewed_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'patient_id': self.patient_id,
+            'ward_num': self.ward_num,
+            'patient_name': self.patient_name,
+            'viewed_at': self.viewed_at.strftime('%Y-%m-%d %H:%M:%S')
+        }
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -288,17 +305,35 @@ def process_patient_data(info_lines):
 
 # Get ward metadata without processing patient data
 def get_ward_metadata():
+    import re
     wards_meta = {}
-    ward_files = sorted([f for f in os.listdir('.') if f.startswith('ward_') and f.endswith('_records.pdf')])
+    ward_files = [f for f in os.listdir('.') if f.startswith('ward_') and f.endswith('_records.pdf')]
     
+    # First create the ward data without sorting
     for pdf_filename in ward_files:
         ward_num = pdf_filename.split('_')[1]
+        display_name = ward_num  # Default display name (for named wards)
+        
+        # For numeric ward names, prepend "Ward " to match UI display
+        if ward_num.isdigit():
+            display_name = f"Ward {ward_num}"
+            
         wards_meta[ward_num] = {
             "filename": pdf_filename,
+            "display_name": display_name,
             "patients": {}  # Empty placeholder, will be filled on demand
         }
     
-    return wards_meta
+    # Now sort the wards based on their display names
+    sorted_ward_nums = sorted(wards_meta.keys(), 
+                             key=lambda x: wards_meta[x]["display_name"].lower())
+    
+    # Create a new ordered dictionary with sorted ward data
+    sorted_wards_meta = {}
+    for ward_num in sorted_ward_nums:
+        sorted_wards_meta[ward_num] = wards_meta[ward_num]
+    
+    return sorted_wards_meta
 
 # Process a single ward PDF, with caching
 @lru_cache(maxsize=100)  # Cache more ward data
@@ -315,14 +350,25 @@ def process_ward_pdf(pdf_filename):
 def load_specific_ward(ward_num):
     global wards_data
     
+    logger.debug(f"Attempting to load ward: {ward_num}")
+    
+    # Try to clear any potentially cached data for problematic wards
+    if ward_num in wards_data and not wards_data[ward_num].get("patients"):
+        logger.debug(f"Clearing cache for ward: {ward_num}")
+        # Force clear the cache for this specific ward
+        process_ward_pdf.cache_clear()
+    
     if ward_num in wards_data and wards_data[ward_num].get("patients"):
+        logger.debug(f"Ward {ward_num} data already loaded")
         # Data already loaded
         return
     
     if ward_num in wards_data:
         pdf_filename = wards_data[ward_num]["filename"]
-        wards_data[ward_num]["patients"] = process_ward_pdf(pdf_filename)
-        logger.debug(f"Loaded ward {ward_num} with {len(wards_data[ward_num]['patients'])} patients")
+        logger.debug(f"Loading ward data for {ward_num} from {pdf_filename}")
+        patient_data = process_ward_pdf(pdf_filename)
+        wards_data[ward_num]["patients"] = patient_data
+        logger.debug(f"Loaded ward {ward_num} with {len(patient_data)} patients")
     else:
         logger.error(f"Ward {ward_num} not found in ward metadata")
 
@@ -394,6 +440,9 @@ def loading_status():
 @app.route('/ward/<ward_num>')
 @login_required
 def ward(ward_num):
+    # URL decode the ward_num to handle special characters
+    ward_num = unquote(ward_num)
+    
     # Load this specific ward's data on demand
     load_specific_ward(ward_num)
     
@@ -409,14 +458,23 @@ def ward(ward_num):
 @app.route('/search/<ward_num>')
 @login_required
 def search(ward_num):
+    # URL decode the ward_num to handle special characters
+    ward_num = unquote(ward_num)
+    
     # Load this specific ward's data on demand
     load_specific_ward(ward_num)
     
     if ward_num not in wards_data:
+        logger.error(f"Ward {ward_num} not found in wards_data")
         return jsonify([])
     
     search_query = request.args.get('q', '').strip().lower()
-    ward_patients = wards_data[ward_num]["patients"]
+    ward_patients = wards_data[ward_num].get("patients", {})
+    
+    # Debug logging to track what's happening
+    logger.debug(f"Search in ward {ward_num}: {len(ward_patients)} patients found in ward data")
+    if not ward_patients:
+        logger.debug(f"Patient data for ward {ward_num} appears empty")
     
     # If no search query, return all patients
     if not search_query:
@@ -429,18 +487,40 @@ def search(ward_num):
                   if search_query in pid.lower() or 
                      search_query in data["name"].lower()]
     
+    logger.debug(f"Search results count: {len(results)}")
     return jsonify(results)
 
 @app.route('/search_wards')
 @login_required
 def search_wards():
-    query = request.args.get('q', '').lower()
+    query = request.args.get('q', '').lower().strip()
     results = []
     
+    # Handle "ward X" format by removing "ward" and trimming
+    if query.startswith('ward'):
+        query = query[4:].strip()
+    
     for ward_num, ward_info in wards_data.items():
-        if (query in ward_num or 
+        # For numeric searches, be more precise
+        try:
+            search_num = query.strip()
+            ward_number = ward_num.strip()
+            if search_num and ward_number.isdigit():
+                # Only match if it's the exact number or starts with the search number
+                if ward_number == search_num or ward_number.startswith(search_num):
+                    patient_count = len(ward_info.get('patients', {}))
+                    results.append({
+                        'ward_num': ward_num,
+                        'filename': ward_info['filename'],
+                        'patient_count': patient_count
+                    })
+                continue
+        except ValueError:
+            pass
+        
+        # For non-numeric searches, use simple contains
+        if (query in ward_num.lower() or
             query in ward_info['filename'].lower()):
-            # Get patient count if available, otherwise zero
             patient_count = len(ward_info.get('patients', {}))
             results.append({
                 'ward_num': ward_num,
@@ -473,6 +553,25 @@ def patient(patient_id):
     if ward_num_found:
         patient_data = wards_data[ward_num_found]["patients"][patient_id]
         log_access('view_patient', patient_id)
+        
+        # Add to recently viewed
+        recent = RecentlyViewedPatient(
+            user_id=current_user.id,
+            patient_id=patient_id,
+            ward_num=ward_num_found,
+            patient_name=patient_data["name"]
+        )
+        db.session.add(recent)
+        
+        # Keep only last 10 viewed patients per user
+        older_views = RecentlyViewedPatient.query.filter_by(user_id=current_user.id)\
+            .order_by(RecentlyViewedPatient.viewed_at.desc())\
+            .offset(10).all()
+        for old in older_views:
+            db.session.delete(old)
+            
+        db.session.commit()
+        
         return render_template('patient.html',
                             patient_id=patient_id,
                             patient_info_dict=patient_data["info"],
@@ -532,6 +631,9 @@ def view_audit_log():
 @app.route('/ward_patient_count/<ward_num>')
 @login_required
 def ward_patient_count(ward_num):
+    # URL decode the ward_num to handle special characters
+    ward_num = unquote(ward_num)
+    
     # Check if we already have the ward data loaded
     if ward_num in wards_data and wards_data[ward_num].get("patients"):
         count = len(wards_data[ward_num]["patients"])
@@ -544,6 +646,81 @@ def ward_patient_count(ward_num):
             count = 0
     
     return jsonify({"ward": ward_num, "count": count})
+
+@app.route('/recent-patients')
+@login_required
+def recent_patients():
+    recents = RecentlyViewedPatient.query\
+        .filter_by(user_id=current_user.id)\
+        .order_by(RecentlyViewedPatient.viewed_at.desc())\
+        .limit(10)\
+        .all()
+    return jsonify([r.to_dict() for r in recents])
+
+@app.route('/debug_ward/<ward_num>')
+@login_required
+def debug_ward(ward_num):
+    # URL decode the ward_num to handle special characters
+    ward_num = unquote(ward_num)
+    
+    if ward_num in wards_data:
+        pdf_filename = wards_data[ward_num]["filename"]
+        logger.debug(f"Debugging ward {ward_num}, filename: {pdf_filename}")
+        
+        # Check if the file exists
+        file_exists = os.path.exists(pdf_filename)
+        logger.debug(f"File exists: {file_exists}")
+        
+        if file_exists:
+            # Try to read the file directly
+            try:
+                reader = PdfReader(pdf_filename)
+                page_count = len(reader.pages)
+                logger.debug(f"PDF has {page_count} pages")
+                
+                # Try to extract text from the first page
+                first_page_text = reader.pages[0].extract_text()
+                text_sample = first_page_text[:100] + "..." if len(first_page_text) > 100 else first_page_text
+                logger.debug(f"First page text sample: {text_sample}")
+                
+                # Process the PDF using our existing function
+                patient_data = process_ward_pdf(pdf_filename)
+                patient_count = len(patient_data)
+                logger.debug(f"Extracted {patient_count} patients")
+                
+                return jsonify({
+                    "ward": ward_num,
+                    "filename": pdf_filename,
+                    "file_exists": file_exists,
+                    "page_count": page_count,
+                    "patient_count": patient_count,
+                    "text_sample": text_sample,
+                    "success": True
+                })
+            except Exception as e:
+                logger.error(f"Error debugging ward {ward_num}: {str(e)}")
+                import traceback
+                logger.error(traceback.format_exc())
+                return jsonify({
+                    "ward": ward_num,
+                    "filename": pdf_filename, 
+                    "file_exists": file_exists,
+                    "error": str(e),
+                    "success": False
+                })
+        else:
+            return jsonify({
+                "ward": ward_num,
+                "filename": pdf_filename,
+                "file_exists": False,
+                "success": False
+            })
+    
+    return jsonify({
+        "ward": ward_num,
+        "error": "Ward not found in data",
+        "success": False
+    })
 
 if __name__ == '__main__':
     with app.app_context():

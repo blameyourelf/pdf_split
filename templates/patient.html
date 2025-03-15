@@ -250,7 +250,7 @@
         <div class="navigation">
             <a href="/ward/{{ ward_num }}" class="nav-button back-to-ward">
                 <i class="fas fa-arrow-left"></i>
-                Back to Ward {{ ward_num }}
+                Back to {% if ward_num.isdigit() %}Ward {{ ward_num }}{% else %}{{ ward_num }}{% endif %}
             </a>
             <a href="/" class="nav-button back-to-home">
                 <i class="fas fa-home"></i>
@@ -261,7 +261,7 @@
         <div class="patient-header">
             <div class="ward-badge">
                 <i class="fas fa-hospital-user"></i>
-                Ward {{ ward_num }}
+                {% if ward_num.isdigit() %}Ward {{ ward_num }}{% else %}{{ ward_num }}{% endif %}
             </div>
             <h1 class="title">Patient Record</h1>
             <p class="subtitle">{{ pdf_filename }}</p>

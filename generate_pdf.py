@@ -192,6 +192,28 @@ def create_pdf(file_path, ward_num):
     c.save()
 
 if __name__ == "__main__":
-    # Create PDFs for each ward (1-80)
-    for ward_num in range(1, 81):
-        create_pdf(f"ward_{ward_num}_records.pdf", ward_num)
+    # Create PDFs for numbered wards (1-50)
+    for ward_num in range(1, 51):
+        create_pdf(f"ward_{ward_num}_records.pdf", str(ward_num))  # Just pass the number as display name
+
+    # Create PDFs for special wards with non-numeric names
+    special_wards = [
+        "ACU",  # Acute Care Unit
+        "CCU",  # Critical Care Unit
+        "HDU",  # High Dependency Unit
+        "ICU",  # Intensive Care Unit
+        "MAU",  # Medical Assessment Unit
+        "NICU", # Neonatal Intensive Care Unit
+        "Maple",  # Named wards
+        "Oak",
+        "Pine",
+        "Willow",
+        "Sunflower",
+        "Rose",
+        "A&E",  # Emergency Department
+        "Maternity",
+        "Pediatrics"
+    ]
+
+    for ward_name in special_wards:
+        create_pdf(f"ward_{ward_name}_records.pdf", ward_name)  # Use clean name for display

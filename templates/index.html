@@ -152,6 +152,59 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+        .recent-patients {
+            position: relative;
+            display: inline-block;
+            margin-bottom: 2rem;
+        }
+        .recent-patients-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            display: none;
+            z-index: 1000;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .recent-patients.active .recent-patients-dropdown {
+            display: block;
+        }
+        .recent-patients-button {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: white;
+            padding: 0.75rem 1.5rem;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 500;
+            color: #2d3748;
+            transition: all 0.2s ease;
+        }
+        .recent-patients-button:hover {
+            background: #f7fafc;
+        }
+        .recent-patients-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        .recent-patient-item {
+            padding: 0.75rem;
+            border-bottom: 1px solid #e2e8f0;
+            transition: all 0.2s ease;
+        }
+        .recent-patient-item:last-child {
+            border-bottom: none;
+        }
+        .recent-patient-item:hover {
+            background-color: #f7fafc;
+        }
     </style>
     <script>
         async function searchWards() {
@@ -211,8 +264,67 @@
             }
         }
 
-        // Load patient counts when page is loaded
-        window.addEventListener('DOMContentLoaded', loadWardPatientCounts);
+        // Function to load recently viewed patients
+        async function loadRecentPatients() {
+            try {
+                const response = await fetch('/recent-patients');
+                if (!response.ok) {
+                    throw new Error('Failed to load recent patients');
+                }
+                const patients = await response.json();
+                displayRecentPatients(patients);
+            } catch (error) {
+                console.error('Error loading recent patients:', error);
+            }
+        }
+
+        document.addEventListener('click', function(event) {
+            const dropdown = document.querySelector('.recent-patients');
+            const isClickInside = dropdown.contains(event.target);
+            
+            if (!isClickInside) {
+                dropdown.classList.remove('active');
+            }
+        });
+
+        function toggleRecentPatients() {
+            const dropdown = document.querySelector('.recent-patients');
+            dropdown.classList.toggle('active');
+        }
+
+        function displayRecentPatients(patients) {
+            const list = document.getElementById('recent-patients-list');
+            const count = document.getElementById('recent-patients-count');
+            if (!list || !count) return;
+            
+            count.textContent = patients.length;
+            
+            if (patients.length === 0) {
+                list.innerHTML = '<li class="recent-patient-item">No recently viewed patients</li>';
+                return;
+            }
+            
+            list.innerHTML = patients.map(patient => `
+                <li class="recent-patient-item">
+                    <a href="/patient/${patient.patient_id}" class="recent-patient-link">
+                        <div class="recent-patient-info">
+                            <span class="recent-patient-name">${patient.patient_name}</span>
+                            <span class="recent-patient-details">ID: ${patient.patient_id}</span>
+                        </div>
+                        <div class="recent-patient-ward">
+                            <i class="fas fa-hospital-user"></i>
+                            Ward ${patient.ward_num}
+                        </div>
+                    </a>
+                </li>
+            `).join('');
+        }
+
+        // Add to window load event listener
+        window.addEventListener('DOMContentLoaded', () => {
+            loadWardPatientCounts();
+            loadRecentPatients();
+        });
     </script>
 </head>
 <body>
@@ -241,6 +353,19 @@
         <h1 class="title">Contingency Trak Digital Notes Viewer</h1>
         <p class="subtitle">Select a Ward to View Patient Records</p>
         
+        <div class="recent-patients">
+            <button type="button" class="recent-patients-button" onclick="toggleRecentPatients()">
+                <i class="fas fa-history"></i>
+                Recent Patients (<span id="recent-patients-count">0</span>)
+                <i class="fas fa-chevron-down"></i>
+            </button>
+            <div class="recent-patients-dropdown">
+                <ul class="recent-patients-list" id="recent-patients-list">
+                    <li class="recent-patient-item">Loading...</li>
+                </ul>
+            </div>
+        </div>
+
         <div class="search-box">
             <form onsubmit="event.preventDefault(); searchWards();">
                 <div class="field">
@@ -262,7 +387,9 @@
                 <div class="ward-icon">
                     <i class="fas fa-hospital-user"></i>
                 </div>
-                <h2 class="ward-title">Ward {{ ward_num }}</h2>
+                <h2 class="ward-title">
+                    {{ ward_info.display_name }}
+                </h2>
                 <p class="ward-info">
                     <span class="patient-count">
                         <span class="ward-count-loading">

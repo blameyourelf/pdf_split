@@ -254,7 +254,13 @@
     <div class="container">
         <div class="ward-header">
             <div>
-                <h1 class="title">Ward {{ ward_num }}</h1>
+                <h1 class="title">
+                    {% if ward_num.isdigit() %}
+                        Ward {{ ward_num }}
+                    {% else %}
+                        {{ ward_num }}
+                    {% endif %}
+                </h1>
                 <p class="subtitle">{{ pdf_filename }}</p>
             </div>
             <a href="/" class="back-button">
