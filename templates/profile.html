@@ -1,96 +1,75 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>User Profile - Contingency EPR</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.min.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.9.3/css/bulma.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-        body {
-            padding: 20px;
-            font-family: 'Inter', sans-serif;
-            background-color: #f8fafc;
-            min-height: 100vh;
-        }
-        .container {
-            max-width: 600px;
-            margin: 0 auto;
-            padding: 2rem;
-        }
-        .title {
-            color: #1a365d;
-            font-weight: 700;
-            font-size: 2rem;
-            margin-bottom: 1rem;
-        }
-        .card {
-            background: white;
-            border-radius: 12px;
-            padding: 2rem;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
-        }
-        .back-button {
-            margin-bottom: 2rem;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <a href="/" class="button is-light back-button">
-            <span class="icon">
-                <i class="fas fa-arrow-left"></i>
-            </span>
-            <span>Back to Home</span>
-        </a>
+{% extends "base.html" %}
 
-        <div class="card">
-            <h1 class="title">Choose Default Ward</h1>
-            <p class="help mb-4">Select a ward to be automatically shown when you log in</p>
-            
-            {% with messages = get_flashed_messages(with_categories=true) %}
-                {% if messages %}
-                    {% for category, message in messages %}
-                        {% if category != 'note-success' and category != 'note-error' %}
-                        <div class="notification is-{{ category }}">
-                            {{ message }}
-                        </div>
-                        {% endif %}
-                    {% endfor %}
-                {% endif %}
-            {% endwith %}
-            
-            <form method="POST">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                
-                <div class="field">
-                    <label class="label">Default Ward</label>
-                    <div class="control">
-                        <div class="select is-fullwidth">
-                            <select name="default_ward">
-                                <option value="">No default ward</option>
-                                {% for ward_id, ward_info in wards.items() %}
-                                    <option value="{{ ward_id }}" {% if current_ward == ward_id %}selected{% endif %}>
-                                        {{ ward_info.display_name }}
-                                    </option>
-                                {% endfor %}
-                            </select>
-                        </div>
+{% block title %}User Profile - Contingency EPR{% endblock %}
+
+{% block context_actions %}
+<a href="/" class="button is-info is-light">
+    <span class="icon">
+        <i class="fas fa-arrow-left"></i>
+    </span>
+    <span>Back to Home</span>
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="card">
+        <h1 class="title">Choose Default Ward</h1>
+        <p class="help mb-4">Select a ward to be automatically shown when you log in</p>
+        
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    {% if category != 'note-success' and category != 'note-error' %}
+                    <div class="notification is-{{ category }}">
+                        {{ message }}
                     </div>
-                    <!-- <p class="help">You will be taken to this ward directly after logging in.</p> -->
-                </div>
-                
-                <div class="field">
-                    <div class="control">
-                        <button type="submit" class="button is-primary">
-                            Save Changes
-                        </button>
+                    {% endif %}
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        
+        <form method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            
+            <div class="field">
+                <label class="label">Default Ward</label>
+                <div class="control">
+                    <div class="select is-fullwidth">
+                        <select name="default_ward">
+                            <option value="">No default ward</option>
+                            {% for ward_id, ward_info in wards.items() %}
+                                <option value="{{ ward_id }}" {% if current_ward == ward_id %}selected{% endif %}>
+                                    {{ ward_info.display_name }}
+                                </option>
+                            {% endfor %}
+                        </select>
                     </div>
                 </div>
-            </form>
-        </div>
+            </div>
+            
+            <div class="field">
+                <div class="control">
+                    <button type="submit" class="button is-primary">
+                        Save Changes
+                    </button>
+                </div>
+            </div>
+        </form>
     </div>
-</body>
-</html>
+</div>
+
+<style>
+    .container {
+        max-width: 600px;
+        margin: 0 auto;
+        padding: 2rem;
+    }
+    .card {
+        background: white;
+        border-radius: 12px;
+        padding: 2rem;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+    }
+</style>
+{% endblock %}

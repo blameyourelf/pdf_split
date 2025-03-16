@@ -146,12 +146,14 @@
         <h3 class="section-title">
             <i class="fas fa-notes-medical"></i>
             Continuous Care Notes
+            {% if notes_enabled %}
             <button onclick="showAddNoteModal()" class="button is-primary is-small ml-4">
                 <span class="icon is-small">
                     <i class="fas fa-plus"></i>
                 </span>
                 <span>Add Note</span>
             </button>
+            {% endif %}
         </h3>
 
         <!-- Add search box -->
@@ -207,12 +209,16 @@
             <button class="delete" aria-label="close" onclick="closeAddNoteModal()"></button>
         </header>
         <section class="modal-card-body">
+            <div class="notification is-warning is-light mb-4">
+                <p><strong>Important:</strong> Notes added here will not automatically transfer to the main EPR system once it's back online.</p>
+                <p>Use the "My Shift Notes" feature later to review notes you need to transfer to the main system.</p>
+            </div>
             <form id="note-form" method="POST" action="/add_care_note/{{ patient_id }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="field">
                     <label class="label">Note</label>
                     <div class="control">
-                        <textarea class="textarea" id="note-text" name="note" placeholder="Enter care note..."></textarea>
+                        <textarea class="textarea" name="note" id="note-text" placeholder="Enter care note..."></textarea>
                     </div>
                 </div>
                 <footer class="modal-card-foot">
@@ -223,7 +229,9 @@
         </section>
     </div>
 </div>
+{% endblock %}
 
+{% block scripts %}
 <script>
     // Add function to load more notes on demand
     let currentOffset = 50; // Start after the initial 50 notes
@@ -231,11 +239,9 @@
     async function loadMoreNotes(offset) {
         const loadingIndicator = document.getElementById('loading-more');
         const loadMoreBtn = document.getElementById('load-more-btn');
-        
         try {
             loadingIndicator.style.display = 'block';
             loadMoreBtn.disabled = true;
-            
             const response = await fetch(`/load_more_notes/{{ patient_id }}/${offset}`);
             if (!response.ok) {
                 throw new Error('Failed to load more notes');
@@ -243,7 +249,6 @@
             
             const data = await response.json();
             const tableBody = document.getElementById('care-notes-body');
-            
             // Add new rows to the table
             data.notes.forEach(note => {
                 const row = document.createElement('tr');
@@ -264,7 +269,7 @@
                 row.appendChild(noteCell);
                 
                 // Add to table
-                tableBody.appendChild(row);
+                tableBody.appendChild(row);    
             });
             
             // Update offset for next load
@@ -288,7 +293,7 @@
         const searchTerm = document.getElementById('care-notes-search').value.toLowerCase();
         const table = document.getElementById('care-notes-table');
         const rows = table.getElementsByTagName('tr');
-
+        
         // Start from 1 to skip header row
         for (let i = 1; i < rows.length; i++) {
             const row = rows[i];
@@ -297,7 +302,7 @@
 
             // Remove existing highlights
             row.innerHTML = row.innerHTML.replace(/<mark class="highlight">/g, '').replace(/<\/mark>/g, '');
-
+            
             // Search through all cells in the row
             for (let cell of cells) {
                 const text = cell.textContent;
@@ -344,7 +349,6 @@
     function displayInitialNotes(notes) {
         const tableBody = document.getElementById('care-notes-body');
         tableBody.innerHTML = '';
-        
         notes.forEach(note => {
             const row = createNoteRow(note);
             tableBody.appendChild(row);
@@ -383,7 +387,7 @@
         } else if (note.date) {
             dateCell.textContent = note.date;
         }
-        
+
         // Add "NEW" badge if needed
         if (note.is_new) {
             const badge = document.createElement('span');
@@ -410,7 +414,7 @@
         } else {
             noteCell.textContent = note.note || '';
         }
-        
+
         // Add to row
         row.appendChild(dateCell);
         row.appendChild(staffCell);

@@ -1,75 +1,55 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Shift Notes</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.min.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.9.3/css/bulma.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-        body {
-            padding: 20px;
-            font-family: 'Inter', sans-serif;
-            background-color: #f8fafc;
-            min-height: 100vh;
-        }
-        .container {
-            max-width: 1000px;
-            margin: 0 auto;
-        }
-        .title {
-            color: #1a365d;
-            font-weight: 700;
-            font-size: 2rem;
-            margin-bottom: 1rem;
-        }
-        .notes-table th {
-            background-color: #f7fafc;
-        }
-        .back-button {
-            margin-bottom: 2rem;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <a href="/" class="button is-light back-button">
-            <span class="icon">
-                <i class="fas fa-arrow-left"></i>
-            </span>
-            <span>Back to Home</span>
-        </a>
+{% extends "base.html" %}
 
-        <h1 class="title">My Shift Notes (Last 12 Hours)</h1>
+{% block title %}My Shift Notes{% endblock %}
 
-        <div class="box">
-            <table class="table is-fullwidth notes-table">
-                <thead>
-                    <tr>
-                        <th>Time</th>
-                        <th>Ward</th>
-                        <th>Patient</th>
-                        <th>Note</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for note in notes %}
-                    <tr>
-                        <td>{{ note.timestamp }}</td>
-                        <td>{{ note.ward }}</td>
-                        <td>
-                            {{ note.patient_name }}
-                            <br>
-                            <small class="has-text-grey">ID: {{ note.patient_id }}</small>
-                        </td>
-                        <td style="white-space: pre-wrap;">{{ note.note | replace('\n', '<br>') | safe }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
+{% block context_actions %}
+<a href="/" class="button is-info is-light">
+    <span class="icon">
+        <i class="fas fa-arrow-left"></i>
+    </span>
+    <span>Back to Home</span>
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1 class="title">My Shift Notes (Last 12 Hours)</h1>
+    
+    <div class="notification is-info is-light mb-4">
+        <p><strong>Note:</strong> Once the main EPR system is back online, use this view to find notes you need to transfer.</p>
     </div>
-</body>
-</html>
+    
+    <div class="box">
+        <table class="table is-fullwidth notes-table">
+            <thead>
+                <tr>
+                    <th>Time</th>
+                    <th>Ward</th>
+                    <th>Patient</th>
+                    <th>Note</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for note in notes %}
+                <tr>
+                    <td>{{ note.timestamp }}</td>
+                    <td>{{ note.ward }}</td>
+                    <td>
+                        {{ note.patient_name }}
+                        <br>
+                        <small class="has-text-grey">ID: {{ note.patient_id }}</small>
+                    </td>
+                    <td style="white-space: pre-wrap;">{{ note.note | replace('\n', '<br>') | safe }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<style>
+    .notes-table th {
+        background-color: #f7fafc;
+    }
+</style>
+{% endblock %}

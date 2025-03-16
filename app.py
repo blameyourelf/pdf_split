@@ -755,7 +755,8 @@ def patient(patient_id):
                                care_notes=combined,
                                ward_num=ward_num_found,
                                pdf_filename=ward_info["filename"],
-                               pdf_creation_time=pdf_creation_time)
+                               pdf_creation_time=pdf_creation_time,
+                               notes_enabled=NOTES_ENABLED)
     return "Patient not found", 404
     
 @app.route('/pdf/<patient_id>')
@@ -838,9 +839,32 @@ def recent_patients():
     
 from flask_wtf.csrf import validate_csrf
 
+# Add global setting
+NOTES_ENABLED = True
+
+# Add a route to toggle notes functionality
+@app.route('/admin/toggle_notes', methods=['POST'])
+@login_required
+def toggle_notes():
+    global NOTES_ENABLED
+    
+    if current_user.role != 'admin':
+        flash('Access denied')
+        return redirect(url_for('index'))
+    
+    NOTES_ENABLED = not NOTES_ENABLED
+    status = 'enabled' if NOTES_ENABLED else 'disabled'
+    flash(f'Note-adding functionality has been {status}', 'success')
+    return redirect(request.referrer or url_for('admin_notes'))
+
+# Update the add_care_note route to check if notes are enabled
 @app.route('/add_care_note/<patient_id>', methods=['POST'])
 @login_required
 def add_care_note(patient_id):
+    if not NOTES_ENABLED:
+        flash('Note-adding functionality is currently disabled by the administrator', 'note-error')
+        return redirect(url_for('patient', patient_id=patient_id))
+        
     try:
         note_text = request.form.get('note')
         if not note_text:
@@ -867,7 +891,10 @@ def add_care_note(patient_id):
         # Add and save the care note
         db.session.add(note)
         db.session.commit()
-        flash('Note added successfully!', 'note-success')
+        
+        # Record in audit log
+        log_access('add_note', patient_id)
+        
         # Use session-based flash instead of regular flash
         session['care_note_success'] = 'Note added successfully!'
         return redirect(url_for('patient', patient_id=patient_id))
@@ -881,34 +908,25 @@ def add_care_note(patient_id):
 def my_shift_notes():
     # Get notes from last 12 hours
     cutoff = datetime.utcnow() - timedelta(hours=12)
-    notes = CareNote.query\
-        .filter(CareNote.user_id == current_user.id)\
+    notes = CareNote.query.filter_by(user_id=current_user.id)\
         .filter(CareNote.timestamp >= cutoff)\
         .order_by(CareNote.timestamp.desc())\
         .all()
-    
     # Prepare notes with names - now using stored patient_name
     notes_with_names = []
-    
-    # Pre-load ward display names for efficiency
-    ward_display_names = {ward_id: info.get("display_name", ward_id) 
-                         for ward_id, info in wards_data.items()}
-    
     for note in notes:
+        # Preload ward display names for efficiency
+        ward_display_names = {ward_id: info.get("display_name", ward_id) 
+                              for ward_id, info in wards_data.items()}
         # Get ward name from our preloaded display names
-        ward_name = "Unknown"
-        if note.ward_id:
-            ward_name = ward_display_names.get(note.ward_id, note.ward_id)
-        
+        ward_name = ward_display_names.get(note.ward_id, note.ward_id)
         # Use stored patient_name
         patient_name = note.patient_name or "Unknown"
-        
         notes_with_names.append({
             **note.to_dict(),
             'patient_name': patient_name,
             'ward': ward_name
         })
-    
     return render_template('shift_notes.html', notes=notes_with_names)
 
 @app.route('/admin/notes')
@@ -918,7 +936,7 @@ def admin_notes():
     if current_user.role != 'admin':
         flash('Access denied')
         return redirect(url_for('index'))
-
+    
     # Get filter parameters with explicit empty defaults
     ward_id = request.args.get('ward', '')
     username = request.args.get('username', '')
@@ -955,7 +973,6 @@ def admin_notes():
             query = query.filter(CareNote.timestamp >= date_from_obj)
         except ValueError:
             pass
-            
     if date_to:
         filters_applied = True
         try:
@@ -981,7 +998,6 @@ def admin_notes():
     
     # Get all users from the notes for batch processing
     user_ids = list(set(note.user_id for note in CareNote.query.with_entities(CareNote.user_id).distinct()))
-    
     # Get all ward IDs from notes (for filter options)
     ward_ids_in_notes = set(note.ward_id for note in CareNote.query.with_entities(CareNote.ward_id).distinct() if note.ward_id)
     
@@ -995,20 +1011,19 @@ def admin_notes():
     available_wards = {}
     for ward_id in wards_data.keys():
         available_wards[ward_id] = wards_data[ward_id]
-    
     # Sort wards alphabetically by display name for better UX
     available_wards = dict(sorted(
         available_wards.items(), 
         key=lambda item: item[1].get('display_name', item[0]).lower()
     ))
-
+    
     # Get all available usernames for the filter dropdown from notes
     available_usernames = sorted([users_map.get(uid) for uid in user_ids if uid in users_map])
     
     # Preserve the exact ward_id from request parameters
     selected_ward = request.args.get('ward', '')
     print(f"Filter selected_ward: '{selected_ward}'")
-
+    
     filters = {
         'ward': selected_ward,
         'username': username,
@@ -1019,7 +1034,7 @@ def admin_notes():
     
     # Debug the filters being passed to template
     print(f"Filters passed to template: {filters}")
-
+    
     # Process notes for display
     notes = []
     for note in paginated_notes.items:
@@ -1053,7 +1068,8 @@ def admin_notes():
                           total_notes=total_notes,
                           prev_page=paginated_notes.prev_num or page,
                           next_page=paginated_notes.next_num or page,
-                          excel_export_available=EXCEL_EXPORT_AVAILABLE)
+                          excel_export_available=EXCEL_EXPORT_AVAILABLE,
+                          notes_enabled=NOTES_ENABLED)
 
 @app.route('/admin/notes/export/<format>')
 @login_required
@@ -1088,7 +1104,6 @@ def export_notes(format):
             query = query.filter(CareNote.timestamp >= date_from_obj)
         except ValueError:
             pass
-            
     if date_to:
         try:
             date_to_obj = datetime.strptime(date_to, '%Y-%m-%d')
@@ -1097,10 +1112,10 @@ def export_notes(format):
         except ValueError:
             pass
     
-    # Apply ward filter
+    # Apply ward filter - ensure it's a non-empty string
     if ward_id and ward_id.strip():
         query = query.filter(CareNote.ward_id == ward_id)
-
+    
     # Get the filtered notes
     notes = query.order_by(CareNote.timestamp.desc()).all()
     
@@ -1111,7 +1126,7 @@ def export_notes(format):
     
     # Pre-load ward display names
     ward_display_names = {ward_id: info.get("display_name", ward_id) 
-                         for ward_id, info in wards_data.items()}
+                          for ward_id, info in wards_data.items()}
     
     # Process notes efficiently
     export_data = []
@@ -1127,7 +1142,7 @@ def export_notes(format):
             'ward': ward_name,
             'username': username
         })
-
+    
     if format == 'excel':
         if not EXCEL_EXPORT_AVAILABLE:
             error_msg = "Excel export is not available. Please ensure xlsxwriter package is installed."
@@ -1194,90 +1209,79 @@ def export_excel(data):
         return redirect(url_for('admin_notes'))
 
 def export_pdf(data):
-    # Optimize PDF generation by reducing in-memory operations
-    output = io.BytesIO()
-    doc = SimpleDocTemplate(
-        output, 
-        pagesize=letter,
-        rightMargin=30,
-        leftMargin=30,
-        topMargin=30,
-        bottomMargin=30
-    )
-    
-    elements = []
-    styles = getSampleStyleSheet()
-    
-    # Optimize paragraph style for better performance
-    note_style = ParagraphStyle(
-        'NoteStyle',
-        parent=styles['Normal'],
-        fontSize=8,
-        leading=10,
-        spaceBefore=0,
-        spaceAfter=0,
-    )
-    
-    # Add minimal header
-    elements.append(Paragraph(f"Notes Export - {datetime.now().strftime('%Y-%m-%d %H:%M')}", styles["Heading2"]))
-    elements.append(Spacer(1, 12))
-    
-    # Create table with optimized data
-    table_data = [["Time", "Ward", "Patient", "User", "Note"]]
-    
-    # Process data in chunks to reduce memory usage
-    chunk_size = 100
-    for i in range(0, len(data), chunk_size):
-        chunk = data[i:i + chunk_size]
-        for item in chunk:
-            patient_info = f"{item['patient_name']}\n{item['patient_id']}"
-            # Pre-process note text to reduce Paragraph creation overhead
-            note_text = Paragraph(item['note'].replace('\n', '<br/>'), note_style)
-            table_data.append([
-                item['timestamp'].split()[1],  # Only show time to save space
-                item['ward'],
-                patient_info,
-                item['username'],
-                note_text
-            ])
-    
-    # Optimize table style
-    table = Table(table_data, colWidths=[50, 50, 80, 60, 280])
-    table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
-        ('ALIGN', (0, 0), (-1, 0), 'LEFT'),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 9),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
-        ('BACKGROUND', (0, 1), (-1, -1), colors.white),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-        ('ALIGN', (0, 1), (-1, -1), 'LEFT'),
-        ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-        ('FONTSIZE', (0, 1), (-1, -1), 8),
-        ('TOPPADDING', (0, 1), (-1, -1), 4),
-        ('BOTTOMPADDING', (0, 1), (-1, -1), 4),
-    ]))
-    
-    elements.append(table)
-    doc.build(elements)
-    output.seek(0)
-    
-    filename = f"notes_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
-    return send_file(
-        output,
-        mimetype='application/pdf',
-        as_attachment=True,
-        download_name=filename
-    )
-
-@app.cli.command('init-carenotes')
-def init_carenotes():
-    """Initialize the care notes table."""
-    with app.app_context():
-        db.create_all()  # This will create any missing tables
-        print("Care notes table created successfully.")
+    """Export data to PDF with robust error handling for web deployment"""
+    try:
+        # Create an in-memory output file
+        output = io.BytesIO()
+        doc = SimpleDocTemplate(
+            output,
+            pagesize=letter,
+            rightMargin=30,
+            leftMargin=30,
+            topMargin=30,
+            bottomMargin=30
+        )
+        
+        elements = []
+        styles = getSampleStyleSheet()
+        
+        # Add minimal header
+        elements.append(Paragraph(f"Notes Export - {datetime.now().strftime('%Y-%m-%d %H:%M')}", styles["Heading2"]))
+        elements.append(Spacer(1, 12))
+        
+        # Create table with optimized data
+        table_data = [["Time", "Ward", "Patient", "User", "Note"]]
+        
+        # Process data in chunks to reduce memory usage
+        chunk_size = 100
+        for i in range(0, len(data), chunk_size):
+            chunk = data[i:i + chunk_size]
+            for item in chunk:
+                patient_info = f"{item['patient_name']}\n{item['patient_id']}"
+                # Pre-process note text to reduce Paragraph creation overhead
+                note_text = Paragraph(item['note'].replace('\n', '<br/>'), styles['Normal'])
+                table_data.append([
+                    item['timestamp'].split()[1],  # Only show time to save space
+                    item['ward'],
+                    patient_info,
+                    item['username'],
+                    note_text
+                ])
+        
+        table = Table(table_data, colWidths=[50, 50, 80, 60, 280])
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
+            ('ALIGN', (0, 0), (-1, 0), 'LEFT'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 9),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.white),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('ALIGN', (0, 1), (-1, -1), 'LEFT'),
+            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 1), (-1, -1), 8),
+            ('TOPPADDING', (0, 1), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 1), (-1, -1), 4),
+        ]))
+        
+        elements.append(table)
+        doc.build(elements)
+        output.seek(0)
+        
+        # Generate filename with current date
+        filename = f"notes_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+        return send_file(
+            output,
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=filename
+        )
+    except Exception as e:
+        print(f"PDF export failed: {str(e)}")  # Detailed server-side logging
+        flash(f"PDF export failed: {str(e)}", "error")
+        return redirect(url_for('admin_notes'))
 
 @click.command('init-db')
 @with_appcontext
@@ -1288,28 +1292,17 @@ def init_db_command():
 
 app.cli.add_command(init_db_command)
 
+@app.before_request
+def store_referrer():
+    # Store referrer for better navigation
+    if request.endpoint and 'static' not in request.endpoint and request.method == 'GET':
+        # Don't store referrers for logout, login or these specific endpoints
+        excluded_endpoints = ['logout', 'login', 'serve_static']
+        if request.endpoint not in excluded_endpoints:
+            session['last_page'] = request.url
+
 if __name__ == '__main__':
     with app.app_context():
-        db.create_all()
-        
-        # Check if columns exist and add if needed
-        inspector = db.inspect(db.engine)
-        
-        # Add default_ward column to User if needed
-        user_columns = [col['name'] for col in inspector.get_columns('user')]
-        if 'default_ward' not in user_columns:
-            db.engine.execute('ALTER TABLE user ADD COLUMN default_ward VARCHAR(50)')
-        
-        # Add ward_id column to CareNote if needed
-        carenote_columns = [col['name'] for col in inspector.get_columns('care_note')]
-        if 'ward_id' not in carenote_columns:
-            db.engine.execute('ALTER TABLE care_note ADD COLUMN ward_id VARCHAR(50)')
-            
-        # Add patient_name column to CareNote if needed
-        if 'patient_name' not in carenote_columns:
-            db.engine.execute('ALTER TABLE care_note ADD COLUMN patient_name VARCHAR(100)')
-        
-        # Create both databases and tables
         db.create_all()
         db.create_all(bind=['audit'])
         

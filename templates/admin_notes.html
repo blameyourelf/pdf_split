@@ -85,6 +85,15 @@
             </div>
             <div class="column is-narrow">
                 <div class="buttons">
+                    <form method="POST" action="{{ url_for('toggle_notes') }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="button {% if notes_enabled %}is-danger{% else %}is-success{% endif %} is-light">
+                            <span class="icon">
+                                <i class="fas {% if notes_enabled %}fa-ban{% else %}fa-check{% endif %}"></i>
+                            </span>
+                            <span>{% if notes_enabled %}Disable{% else %}Enable{% endif %} Note Adding</span>
+                        </button>
+                    </form>
                     <a href="{{ url_for('view_audit_log') }}" class="button is-info is-light">
                         <span class="icon">
                             <i class="fas fa-history"></i>
