@@ -64,7 +64,7 @@
                             <br>
                             <small class="has-text-grey">ID: {{ note.patient_id }}</small>
                         </td>
-                        <td>{{ note.note }}</td>
+                        <td style="white-space: pre-wrap;">{{ note.note | replace('\n', '<br>') | safe }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>

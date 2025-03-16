@@ -1,0 +1,22 @@
+# PDF files
+*.pdf
+ward_*_records.pdf
+
+# Python virtual environment
+venv/
+env/
+
+# Python cache files
+__pycache__/
+*.py[cod]
+
+# Database files
+*.db
+*.sqlite3
+
+# IDE specific files
+.vscode/
+.idea/
+
+# OS specific files
+.DS_Store
