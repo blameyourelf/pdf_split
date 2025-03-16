@@ -16,6 +16,9 @@
             font-family: 'Inter', sans-serif;
             background-color: #f8fafc;
             min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
         }
         .navbar {
             background: white;
@@ -52,6 +55,18 @@
         .context-actions {
             margin-left: auto;
             margin-right: 1rem;
+        }
+        .content-wrapper {
+            flex: 1;
+        }
+        .footer {
+            background: white;
+            padding: 1rem;
+            text-align: center;
+            color: #718096;
+            font-size: 0.875rem;
+            border-top: 1px solid #e2e8f0;
+            margin-top: 2rem;
         }
     </style>
     {% block extra_styles %}{% endblock %}
@@ -113,7 +128,7 @@
                 </a>
                 {% endif %}
 
-                <a href="{{ url_for('logout') }}" class="button is-danger is-light">
+                <a href="{{ url_for('logout_page') }}" class="button is-danger is-light">
                     <span class="icon">
                         <i class="fas fa-sign-out-alt"></i>
                     </span>
@@ -123,9 +138,18 @@
         </div>
     </nav>
 
-    <div class="container">
-        {% block content %}{% endblock %}
+    <div class="content-wrapper">
+        <div class="container">
+            {% block content %}{% endblock %}
+        </div>
     </div>
+
+    <footer class="footer">
+        <div class="container">
+            <p>© {{ year }} Jamie Smith. All rights reserved.</p>
+            <p>Contingency EPR Digital Notes Viewer | Last Updated {{ git_info.last_updated }}</p>
+        </div>
+    </footer>
 
     {% block scripts %}{% endblock %}
 </body>

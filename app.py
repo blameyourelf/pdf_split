@@ -45,12 +45,14 @@ from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Table, TableStyle, Spacer
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+import subprocess
+from datetime import datetime
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-super-secret-key-8712'  # Change this in production
-app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=24)  # Session lasts 24 hours
-app.config['SESSION_COOKIE_SECURE'] = False  # Set to True in production
-app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=12)  # Limit session lifetime
+app.config['SESSION_COOKIE_SECURE'] = True  # Only send cookies over HTTPS
+app.config['SESSION_COOKIE_HTTPONLY'] = True  # Prevent JavaScript access to cookies
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 
 # Main database for users
@@ -59,6 +61,18 @@ app.config['SQLALCHEMY_BINDS'] = {
     'audit': 'sqlite:///audit.db'
 }
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# Replace the SQLALCHEMY_ENGINE_OPTIONS configuration
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+    'pool_pre_ping': True,
+    'connect_args': {'check_same_thread': False}
+}
+
+# Fix app configuration for sessions
+# Place this near the top of your file where other app.config settings are
+app.config['SESSION_COOKIE_SECURE'] = False  # Temporarily disable for local testing
+app.config['SESSION_TYPE'] = 'filesystem'
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=12)
 
 db = SQLAlchemy(app)
 
@@ -71,6 +85,33 @@ login_manager.init_app(app)
 login_manager.login_view = 'login'
 login_manager.login_message = 'Please log in to access this page.'
 login_manager.session_protection = "strong"
+
+# Add this after creating the Flask app but before the routes
+@app.context_processor
+def inject_year():
+    return {'year': datetime.utcnow().year}
+
+def get_git_info():
+    try:
+        # Get last commit date
+        last_commit_date = subprocess.check_output(
+            ['git', 'log', '-1', '--format=%cd', '--date=format:%B %Y'], 
+            encoding='utf-8'
+        ).strip()
+        return {
+            'last_updated': last_commit_date or 'March 2024'  # Fallback if no git info
+        }
+    except Exception:
+        return {
+            'last_updated': 'March 2024'  # Fallback if git command fails
+        }
+
+@app.context_processor
+def inject_template_vars():
+    return {
+        'year': datetime.utcnow().year,
+        'git_info': get_git_info()
+    }
 
 # User Model in main database
 class User(UserMixin, db.Model):
@@ -151,35 +192,51 @@ def get_notes_enabled():
     return Settings.get_setting('notes_enabled', 'true') == 'true'
 
 def get_timeout_enabled():
-    return Settings.get_setting('timeout_enabled', 'true') == 'true'
+    """Get the timeout enabled setting with a fallback"""
+    try:
+        return Settings.get_setting('timeout_enabled', 'true').lower() == 'true'
+    except Exception:
+        # Default to not timing out on error
+        return False
 
 def get_timeout_minutes():
-    return int(Settings.get_setting('timeout_minutes', '10'))
+    """Get the timeout minutes with a fallback"""
+    try:
+        minutes = Settings.get_setting('timeout_minutes', '30')
+        return int(minutes)
+    except (ValueError, Exception):
+        # Default to 30 minutes on error
+        return 30
 
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
 
 def log_access(action, patient_id=None):
-    if current_user.is_authenticated:
-        log = AuditLog(
-            user_id=current_user.id,
-            username=current_user.username,  # Store username directly
-            action=action,
-            patient_id=patient_id
-        )
-        db.session.add(log)
-        try:
-            # Using a separate commit to ensure the audit record is saved
-            db.session.commit()
-            print(f"Audit log entry created: {action} for {patient_id}")
-        except Exception as e:
-            # If there's an error, rollback but continue (don't prevent the main action)
-            db.session.rollback()
-            print(f"Error logging audit entry: {str(e)}")
+    """Fix log_access to handle cases where user might not be authenticated"""
+    try:
+        if current_user.is_authenticated:
+            log = AuditLog(
+                user_id=current_user.id,
+                username=current_user.username,
+                action=action,
+                patient_id=patient_id
+            )
+            db.session.add(log)
+            try:
+                # Using a separate commit to ensure the audit record is saved
+                db.session.commit()
+                print(f"Audit log entry created: {action} for {patient_id}")
+            except Exception as e:
+                # If there's an error, rollback but continue (don't prevent the main action)
+                db.session.rollback()
+                print(f"Error logging audit entry: {str(e)}")
+    except Exception as e:
+        print(f"Error in log_access: {str(e)}")
 
 # Dictionary to store ward data
 wards_data = {}
+
 # Flag to indicate if data is being loaded
 is_loading_data = False
 
@@ -190,7 +247,6 @@ def extract_patient_info(pdf_path, patient_id=None):
     current_patient_id = None
     try:
         reader = PdfReader(pdf_path)
-        
         for page_idx in range(len(reader.pages)):
             page = reader.pages[page_idx]
             text = page.extract_text()
@@ -214,6 +270,7 @@ def extract_patient_info(pdf_path, patient_id=None):
                 id_match = re.search(r"Patient ID:\s*(\d+)", text)
                 if id_match:
                     current_patient_id = id_match.group(1).strip()
+                    
             # If we found the specific patient we're looking for, or we want all patients
             if not patient_id or (current_patient_id and (current_patient_id == patient_id)):
                 # Extract name if we haven't yet
@@ -221,7 +278,6 @@ def extract_patient_info(pdf_path, patient_id=None):
                     name_match = re.search(r"Name:\s*([^\n]+)", text)
                     if name_match:
                         current_patient["name"] = name_match.group(1).strip()
-                        current_patient["info"]["Name"] = current_patient["name"]
                 # Extract ward if we haven't yet
                 if current_patient and "Ward" not in current_patient["info"]:
                     ward_match = re.search(r"Ward:\s*([^\n]+)", text)
@@ -238,7 +294,7 @@ def extract_patient_info(pdf_path, patient_id=None):
                 # Extract care notes if we're in that section
                 if in_care_notes and current_patient:
                     # If we're continuing from a previous page, just use the whole text
-                    care_notes_text = ""
+                    care_notes_text = text
                     if "Continuous Care Notes" in text:
                         # If this page has the header, extract notes from after that
                         care_notes_section = text.split("Continuous Care Notes", 1)
@@ -268,7 +324,7 @@ def extract_patient_info(pdf_path, patient_id=None):
                                 current_patient["care_notes"].append({
                                     "date": date,
                                     "staff": staff,
-                                    "note": note,
+                                    "note": note
                                 })
                     else:
                         # Try alternative format - splitting by lines and looking for date patterns
@@ -302,13 +358,12 @@ def extract_patient_info(pdf_path, patient_id=None):
                                         "note": full_note
                                     })
                                     i = j - 1  # Move to the last processed line
-                            i += 1  
+                            i += 1
         # Handle last patient
         if current_patient_id and current_patient:
             if not patient_id or current_patient_id == patient_id:
                 patient_data[current_patient_id] = current_patient
         return patient_data
-        
     except Exception as e:
         print(f"PDF extraction error: {str(e)}")
         import traceback
@@ -366,7 +421,7 @@ def process_patient_data(info_lines):
         patient_data = {
             "info": demographics,
             "name": demographics.get("Name", "Unknown"),
-            "vitals": "",  # No vitals in the current PDF format
+            "vitals": "",
             "care_notes": care_notes
         }
         return patient_data
@@ -400,13 +455,12 @@ def get_ward_metadata():
             "patients": {}  # Empty placeholder, will be filled on demand
         }
     # Sort wards
-    sorted_ward_nums = sorted(wards_meta.keys(), 
-                            key=lambda x: wards_meta[x]["display_name"].lower())
+    sorted_ward_nums = sorted(wards_meta.keys(), key=lambda x: wards_meta[x]["display_name"].lower())
     sorted_wards_meta = {}
     for ward_num in sorted_ward_nums:
         sorted_wards_meta[ward_num] = wards_meta[ward_num]
     return sorted_wards_meta
-    
+
 # Process a single ward PDF, with caching
 @lru_cache(maxsize=2)  # Reduce cache size to prevent memory issues
 def process_ward_pdf(pdf_filename):
@@ -442,11 +496,12 @@ def init_ward_data():
     global wards_data, is_loading_data
     is_loading_data = True
     threading.Thread(target=load_ward_data_background).start()
+    is_loading_data = False
 
 # Initialize with metadata
 init_ward_data()
 
-# Add this function to properly load ward patients data
+# Add this function to properly load ward patients data if not already loaded
 def load_ward_patients(ward_num):
     """Load patient data for a specific ward."""
     global wards_data
@@ -502,7 +557,6 @@ def get_patient_info_from_ward_data(patient_id, ward_id=None):
     if ward_id and ward_id in wards_data:
         if not wards_data[ward_id].get("patients"):
             load_ward_patients(ward_id)
-        
         ward_info = wards_data[ward_id]
         patients = ward_info.get("patients", {})
         if patient_id in patients:
@@ -511,23 +565,19 @@ def get_patient_info_from_ward_data(patient_id, ward_id=None):
                 ward_info.get("display_name", ward_id),
                 ward_id
             )
-    
     # Try to find patient in frequently used wards first
     # This optimizes for common wards to avoid loading all wards
     frequently_used_wards = []
-    
     # Get recently viewed wards by this user
     recent_views = RecentlyViewedPatient.query.filter_by(user_id=current_user.id).all()
     for rv in recent_views:
         if rv.ward_num and rv.ward_num not in frequently_used_wards:
             frequently_used_wards.append(rv.ward_num)
-    
     # Check frequent wards first
     for ward_num in frequently_used_wards:
         if ward_num in wards_data:
             if not wards_data[ward_num].get("patients"):
                 load_ward_patients(ward_num)
-            
             ward_info = wards_data[ward_num]
             patients = ward_info.get("patients", {})
             if patient_id in patients:
@@ -536,15 +586,12 @@ def get_patient_info_from_ward_data(patient_id, ward_id=None):
                     ward_info.get("display_name", ward_num),
                     ward_num
                 )
-    
     # If not found in frequent wards, check remaining wards as needed
     for ward_num, ward_info in wards_data.items():
         if ward_num in frequently_used_wards:
             continue  # Skip already checked wards
-            
         if not ward_info.get("patients"):
             load_ward_patients(ward_num)
-        
         patients = ward_info.get("patients", {})
         if patient_id in patients:
             return (
@@ -552,37 +599,72 @@ def get_patient_info_from_ward_data(patient_id, ward_id=None):
                 ward_info.get("display_name", ward_num),
                 ward_num
             )
-    
     # Not found in any ward
     return ("Unknown", "Unknown", None)
 
+# Fix the login route
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    """Enhanced login with debugging"""
+    # If already logged in, go to index
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
+        
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
+        
+        print(f"Login attempt for username: {username}")
+        
         user = User.query.filter_by(username=username).first()
-        if user and check_password_hash(user.password_hash, password):
-            login_user(user, remember=True)  # Enable remember me
-            session.permanent = True  # Use permanent session
-            next_page = request.args.get('next')
-            log_access('login')
-            # Only redirect to 'next' if it's a relative path (security measure)
-            if next_page and not next_page.startswith('/'):
-                next_page = None
-            return redirect(next_page or url_for('index'))
+        
+        if user:
+            print(f"User found in database: {user.username}, ID: {user.id}")
+            password_match = check_password_hash(user.password_hash, password)
+            print(f"Password match: {password_match}")
+            
+            if password_match:
+                print(f"Login successful for {user.username}")
+                login_user(user, remember=True)
+                session.permanent = True
+                session['last_active'] = datetime.utcnow().timestamp()
+                
+                # Add additional session data to help with debugging
+                session['user_id'] = user.id
+                session['login_time'] = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+                
+                log_access('login')
+                
+                next_page = request.args.get('next')
+                if next_page and not next_page.startswith('/'):
+                    next_page = None
+                    
+                return redirect(next_page or url_for('index'))
+                
+        # Only flash message if login failed
         flash('Invalid username or password')
+        
     return render_template('login.html')
 
 @app.after_request
-def after_request(response):
-    # Ensure we have proper security headers
+def add_security_headers(response):
+    # Existing headers
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['X-Frame-Options'] = 'SAMEORIGIN'
     response.headers['X-XSS-Protection'] = '1; mode=block'
+    # Add Content Security Policy
+    csp = (
+        "default-src 'self'; "
+        "script-src 'self' https://cdnjs.cloudflare.com 'unsafe-inline'; "
+        "style-src 'self' https://cdnjs.cloudflare.com https://fonts.googleapis.com 'unsafe-inline'; "
+        "font-src 'self' https://cdnjs.cloudflare.com https://fonts.gstatic.com; "
+        "img-src 'self' data:; "
+        "connect-src 'self'"
+    )
+    response.headers['Content-Security-Policy'] = csp
     return response
 
-@app.route('/logout')
+@app.route('/logout', methods=['POST'])  # Change to POST only
 @login_required
 def logout():
     log_access('logout')
@@ -591,26 +673,41 @@ def logout():
     logout_user()
     return redirect(url_for('login'))
 
+# Add a GET route that shows a confirmation page
+@app.route('/logout', methods=['GET'])
+@login_required
+def logout_page():
+    return render_template('logout.html')  # Create this template with a form
+
+# Fix the index route to confirm login status
 @app.route('/')
 @login_required
 def index():
+    """Modified index route with explicit login check and debug info"""
+    # Debug output to confirm we're authenticated
+    print(f"Index accessed by: {current_user.username if current_user.is_authenticated else 'Anonymous'}")
+    print(f"Current user authenticated: {current_user.is_authenticated}")
+    print(f"Session data: {session}")
+    
     # Explicitly cast to boolean and check for '1'
     show_all = request.args.get('show_all') == '1'
+    
     # Only redirect to default ward if show_all is False AND user has a default ward
     if current_user.default_ward and not show_all:
         return redirect(url_for('ward', ward_num=current_user.default_ward))
+        
     # If show_all is True, or user has no default ward, show all wards
     sorted_wards = {}
     for ward_id, info in sorted(wards_data.items(), key=lambda x: x[1]['display_name'].lower()):
         sorted_wards[ward_id] = info
+        
     return render_template('index.html', wards=sorted_wards, show_all=show_all)
-    
+
 @app.route('/profile', methods=['GET', 'POST'])
 @login_required
 def profile():
     # Remove any note-related flash messages that might have persisted
     session.pop('_flashes', None)
-    
     if request.method == 'POST':
         default_ward = request.form.get('default_ward')
         user = User.query.get(current_user.id)
@@ -618,47 +715,45 @@ def profile():
         db.session.commit()
         flash('Default ward updated successfully', 'success')
         return redirect(url_for('profile'))
-
     wards = get_ward_metadata()
     return render_template('profile.html', 
                          wards=wards,
                          current_ward=current_user.default_ward)
-    
+
 @app.route('/ward/<ward_num>')
 @login_required
 def ward(ward_num):
-    # URL decode ward_num and load data
-    ward_num = unquote(ward_num)
-    load_specific_ward(ward_num)
-    if ward_num in wards_data:
-        ward_info = wards_data[ward_num]
-        log_access('view_ward', f'Ward {ward_num}')
-        # Get PDF creation (modification) time
-        import os
-        pdf_mtime = os.path.getmtime(ward_info["filename"])
-        pdf_creation_time = datetime.fromtimestamp(pdf_mtime).strftime("%Y-%m-%d %H:%M:%S")
-        patient_list = []
-        if ward_info.get("patients"):
-            # Create a simple list of patients for the template
-            for pid, data in ward_info["patients"].items():
-                patient_list.append({
-                    "id": pid, 
-                    "name": data.get("name", "Unknown")
-                })
-        return render_template('ward.html', 
-                              ward_num=ward_num,
-                              ward_data={"patients": ward_info.get("patients", {})},
-                              pdf_filename=ward_info["filename"],
-                              pdf_creation_time=pdf_creation_time)
-    return "Ward not found", 404
-    
-@app.route('/search/<ward_num>')
-@login_required
-def search(ward_num):
     # URL decode the ward_num to handle special characters
     ward_num = unquote(ward_num)
     # Load this specific ward's data on demand
     load_specific_ward(ward_num)
+    ward_info = wards_data[ward_num]
+    log_access('view_ward', f'Ward {ward_num}')
+    if ward_num not in wards_data:
+        return jsonify([])
+    ward_info = wards_data[ward_num]
+    # Get PDF creation (modification) time
+    import os
+    pdf_mtime = os.path.getmtime(ward_info["filename"])
+    pdf_creation_time = datetime.fromtimestamp(pdf_mtime).strftime("%Y-%m-%d %H:%M:%S")
+    patient_list = []
+    if ward_info.get("patients"):
+        # Create a simple list of patients for the template
+        for pid, data in ward_info["patients"].items():
+            patient_list.append({
+                "id": pid,
+                "name": data.get("name", "Unknown")
+            })
+    return render_template('ward.html', 
+                          ward_num=ward_num,
+                          ward_data={"patients": ward_info.get("patients", {})},
+                          pdf_filename=ward_info["filename"],
+                          pdf_creation_time=pdf_creation_time)
+
+@app.route('/search_ward/<ward_num>')
+@login_required
+def search_ward(ward_num):
+    ward_num = unquote(ward_num)
     if ward_num not in wards_data:
         return jsonify([])
     search_query = request.args.get('q', '').strip().lower()
@@ -671,10 +766,10 @@ def search(ward_num):
         # Search in both ID and name
         results = [{"id": pid, "name": data["name"]} 
                   for pid, data in ward_patients.items() 
-                  if search_query in pid.lower() or  
+                  if search_query in pid.lower() or 
                      search_query in data["name"].lower()]
     return jsonify(results)
-    
+
 @app.route('/search_wards')
 @login_required
 def search_wards():
@@ -701,7 +796,7 @@ def search_wards():
         except ValueError:
             pass
         # For non-numeric searches, use simple contains
-        if (query in ward_num.lower() or
+        if (query in ward_num.lower() or 
             query in ward_info['filename'].lower()):
             patient_count = len(ward_info.get('patients', {}))
             results.append({
@@ -710,7 +805,7 @@ def search_wards():
                 'patient_count': patient_count
             })
     return jsonify(results)
-    
+
 @app.route('/patient/<patient_id>')
 @login_required
 def patient(patient_id):
@@ -761,7 +856,7 @@ def patient(patient_id):
             db.session.rollback()
         # Get all PDF notes (no pagination)
         pdf_notes = patient_data.get("care_notes", [])
-        # Get new notes from the database
+        # Get new notes from the database and sort notes (newest first)
         db_notes = [n.to_dict() for n in CareNote.query.filter_by(patient_id=patient_id)
                    .order_by(CareNote.timestamp.desc()).all()]
         for note in db_notes:
@@ -778,9 +873,19 @@ def patient(patient_id):
         pdf_creation_time = datetime.fromtimestamp(pdf_mtime).strftime("%Y-%m-%d %H:%M:%S")
         if 'care_note_success' in session:
             flash(session.pop('care_note_success'), 'success')
+        
+        # Ensure patient info has all required fields
+        patient_info_dict = patient_data.get("info", {})
+        if "Patient ID" not in patient_info_dict:
+            patient_info_dict["Patient ID"] = patient_id
+        if "Name" not in patient_info_dict:
+            patient_info_dict["Name"] = patient_data.get("name", "Unknown")
+        if "Ward" not in patient_info_dict:
+            patient_info_dict["Ward"] = ward_num_found
+        
         return render_template('patient.html',
                                patient_id=patient_id,
-                               patient_info_dict=patient_data["info"],
+                               patient_info_dict=patient_info_dict,
                                vitals=patient_data.get("vitals", ""),
                                care_notes=combined,
                                ward_num=ward_num_found,
@@ -788,7 +893,7 @@ def patient(patient_id):
                                pdf_creation_time=pdf_creation_time,
                                notes_enabled=get_notes_enabled())
     return "Patient not found", 404
-    
+
 @app.route('/pdf/<patient_id>')
 @login_required
 def serve_patient_pdf(patient_id):
@@ -819,7 +924,7 @@ def serve_patient_pdf(patient_id):
         </div>
         """
     return "Patient PDF not found", 404
-    
+
 @app.route('/audit-log')
 @login_required
 def view_audit_log():
@@ -845,7 +950,7 @@ def ward_patient_count(ward_num):
         else:
             count = 0
     return jsonify({"ward": ward_num, "count": count})
-    
+
 @app.route('/recent-patients')
 @login_required
 def recent_patients():
@@ -866,8 +971,6 @@ def recent_patients():
             if len(unique_recents) >= 10:
                 break
     return jsonify([r.to_dict() for r in unique_recents])
-    
-from flask_wtf.csrf import validate_csrf
 
 @app.route('/admin/toggle_notes', methods=['POST'])
 @login_required
@@ -879,7 +982,6 @@ def toggle_notes():
     current_status = get_notes_enabled()
     new_status = not current_status
     Settings.set_setting('notes_enabled', str(new_status).lower())
-    
     status = 'enabled' if new_status else 'disabled'
     flash(f'Note-adding functionality has been {status}', 'success')
     return redirect(request.referrer or url_for('admin_notes'))
@@ -891,22 +993,18 @@ def add_care_note(patient_id):
     if not get_notes_enabled():
         flash('Note-adding functionality is currently disabled by the administrator', 'note-error')
         return redirect(url_for('patient', patient_id=patient_id))
-        
     try:
         note_text = request.form.get('note')
         if not note_text:
             return jsonify({'error': 'Note text is required'}), 400
-            
         # Find which ward this patient belongs to and get patient name
         ward_id = None
         patient_name = "Unknown"
-        
         for ward_num, ward_info in wards_data.items():
             if ward_info.get("patients") and patient_id in ward_info.get("patients", {}):
                 ward_id = ward_num
                 patient_name = ward_info["patients"][patient_id].get("name", "Unknown")
                 break
-        
         note = CareNote(
             patient_id=patient_id,
             user_id=current_user.id,
@@ -914,14 +1012,11 @@ def add_care_note(patient_id):
             ward_id=ward_id,
             patient_name=patient_name  # Save patient name
         )
-        
         # Add and save the care note
         db.session.add(note)
         db.session.commit()
-        
         # Record in audit log
         log_access('add_note', patient_id)
-        
         # Use session-based flash instead of regular flash
         session['care_note_success'] = 'Note added successfully!'
         return redirect(url_for('patient', patient_id=patient_id))
@@ -934,20 +1029,16 @@ def add_care_note(patient_id):
 @login_required
 def my_shift_notes():
     show_all = request.args.get('show_all') == '1'
-    
-    # Build query
     query = CareNote.query.filter_by(user_id=current_user.id)
     
     if not show_all:
         # Only apply time filter if not showing all
         cutoff = datetime.utcnow() - timedelta(hours=12)
         query = query.filter(CareNote.timestamp >= cutoff)
-    
     notes = query.order_by(CareNote.timestamp.desc()).all()
     
     # Prepare notes with names
     notes_with_names = []
-    
     # Pre-load ward display names for efficiency
     ward_display_names = {ward_id: info.get("display_name", ward_id) 
                          for ward_id, info in wards_data.items()}
@@ -955,18 +1046,16 @@ def my_shift_notes():
     for note in notes:
         # Get ward name from our preloaded display names
         ward_name = ward_display_names.get(note.ward_id, note.ward_id)
-        # Use stored patient_name
+        # Use stored patient name
         patient_name = note.patient_name or "Unknown"
-        
         notes_with_names.append({
             **note.to_dict(),
             'patient_name': patient_name,
             'ward': ward_name
         })
-    
     return render_template('shift_notes.html', 
-                         notes=notes_with_names,
-                         show_all=show_all)
+                          notes=notes_with_names,
+                          show_all=show_all)
 
 @app.route('/admin/notes')
 @login_required
@@ -1029,19 +1118,13 @@ def admin_notes():
     
     # Count total matching notes before pagination
     total_notes = query.count()
-    
     # Paginate the query
     paginated_notes = query.order_by(CareNote.timestamp.desc()).paginate(
         page=page, per_page=50, error_out=False
     )
-    
+    users_map = {}
     # Get all users from the notes for batch processing
     user_ids = list(set(note.user_id for note in CareNote.query.with_entities(CareNote.user_id).distinct()))
-    # Get all ward IDs from notes (for filter options)
-    ward_ids_in_notes = set(note.ward_id for note in CareNote.query.with_entities(CareNote.ward_id).distinct() if note.ward_id)
-    
-    # Get usernames in a single database query for display
-    users_map = {}
     if user_ids:
         users = User.query.filter(User.id.in_(user_ids)).all()
         users_map = {user.id: user.username for user in users}
@@ -1049,16 +1132,18 @@ def admin_notes():
     # Get ward display names for dropdown
     available_wards = {}
     for ward_id in wards_data.keys():
+        # Store the ward info dictionary, not just the display name
         available_wards[ward_id] = wards_data[ward_id]
+    
     # Sort wards alphabetically by display name for better UX
+    # Fix: the lambda now properly handles both dictionary and string values
     available_wards = dict(sorted(
-        available_wards.items(), 
-        key=lambda item: item[1].get('display_name', item[0]).lower()
+        available_wards.items(),
+        key=lambda item: item[1]["display_name"].lower() if isinstance(item[1], dict) and "display_name" in item[1] else item[0].lower()
     ))
     
     # Get all available usernames for the filter dropdown from notes
     available_usernames = sorted([users_map.get(uid) for uid in user_ids if uid in users_map])
-    
     # Preserve the exact ward_id from request parameters
     selected_ward = request.args.get('ward', '')
     print(f"Filter selected_ward: '{selected_ward}'")
@@ -1070,7 +1155,6 @@ def admin_notes():
         'date_to': date_to,
         'applied': filters_applied
     }
-    
     # Debug the filters being passed to template
     print(f"Filters passed to template: {filters}")
     
@@ -1078,16 +1162,17 @@ def admin_notes():
     notes = []
     for note in paginated_notes.items:
         # Get ward name efficiently using our preloaded display names
-        ward_name = "Unknown"
-        if note.ward_id:
-            ward_name = available_wards.get(note.ward_id, {}).get("display_name", note.ward_id)
-        
+        # Fix - extract display_name from the ward_info dictionary 
+        ward_info = available_wards.get(note.ward_id)
+        if isinstance(ward_info, dict) and 'display_name' in ward_info:
+            ward_name = ward_info['display_name']
+        else:
+            ward_name = note.ward_id or "Unknown"
+            
         # Use stored patient name
         patient_name = note.patient_name or "Unknown"
-        
         # Get username from our preloaded map
         username_display = users_map.get(note.user_id, "Unknown")
-        
         notes.append({
             'timestamp': note.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
             'patient_id': note.patient_id,
@@ -1096,7 +1181,7 @@ def admin_notes():
             'ward': ward_name,
             'username': username_display
         })
-
+    
     return render_template('admin_notes.html',
                           notes=notes,
                           wards=available_wards,
@@ -1174,7 +1259,6 @@ def export_notes(format):
     for note in notes:
         ward_name = ward_display_names.get(note.ward_id, "Unknown")
         username = users_map.get(note.user_id, "Unknown")
-        
         export_data.append({
             'timestamp': note.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
             'patient_id': note.patient_id,
@@ -1202,7 +1286,6 @@ def export_excel(data):
     try:
         # Create an in-memory output file
         output = io.BytesIO()
-        
         # Create a workbook and add a worksheet
         workbook = xlsxwriter.Workbook(output)
         worksheet = workbook.add_worksheet('Notes')
@@ -1262,7 +1345,6 @@ def export_pdf(data):
             topMargin=30,
             bottomMargin=30
         )
-        
         elements = []
         styles = getSampleStyleSheet()
         
@@ -1298,13 +1380,14 @@ def export_pdf(data):
             ('FONTSIZE', (0, 0), (-1, 0), 9),
             ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
             ('BACKGROUND', (0, 1), (-1, -1), colors.white),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-            ('ALIGN', (0, 1), (-1, -1), 'LEFT'),
+            ('TEXTCOLOR', (0, 1), (-1, -1), colors.black),
             ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
             ('FONTSIZE', (0, 1), (-1, -1), 8),
             ('TOPPADDING', (0, 1), (-1, -1), 4),
             ('BOTTOMPADDING', (0, 1), (-1, -1), 4),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('ALIGN', (0, 1), (-1, -1), 'LEFT')
         ]))
         
         elements.append(table)
@@ -1333,21 +1416,42 @@ def store_referrer():
         if request.endpoint not in excluded_endpoints:
             session['last_page'] = request.url
 
+# Fix the check_session_timeout function
 @app.before_request
 def check_session_timeout():
+    """Improved session timeout check with better debugging"""
     if current_user.is_authenticated and request.endpoint not in ['static', 'logout']:
         if get_timeout_enabled():
-            last_active = session.get('last_active', None)
-            timeout_minutes = get_timeout_minutes()
-            
-            if last_active is not None:
-                last_active = datetime.fromtimestamp(last_active)
-                if datetime.utcnow() - last_active > timedelta(minutes=timeout_minutes):
+            try:
+                last_active = session.get('last_active')
+                if last_active is None:
+                    # Set initial timestamp if missing
+                    session['last_active'] = datetime.utcnow().timestamp()
+                    return
+                
+                # Debug output
+                print(f"Session timeout check: Last active = {last_active}, Current user: {current_user.username}")
+                
+                timeout_minutes = get_timeout_minutes()
+                last_active_dt = datetime.fromtimestamp(float(last_active))
+                time_diff = datetime.utcnow() - last_active_dt
+                time_diff_minutes = time_diff.total_seconds() / 60
+                
+                print(f"Time difference: {time_diff_minutes:.2f} minutes, Timeout: {timeout_minutes} minutes")
+                
+                if time_diff > timedelta(minutes=timeout_minutes):
+                    print(f"Session timed out for {current_user.username}")
                     logout_user()
                     flash('Your session has expired due to inactivity')
                     return redirect(url_for('login'))
-            
-            session['last_active'] = datetime.utcnow().timestamp()
+                
+                # Update last_active timestamp
+                session['last_active'] = datetime.utcnow().timestamp()
+            except Exception as e:
+                # Log any errors during timeout check
+                print(f"Session timeout error: {str(e)}")
+                # Reset the timestamp to prevent logout loops
+                session['last_active'] = datetime.utcnow().timestamp()
 
 @app.route('/admin/timeout_settings', methods=['POST'])
 @login_required
@@ -1357,19 +1461,19 @@ def update_timeout_settings():
         return redirect(url_for('index'))
     
     enabled = request.form.get('timeout_enabled') == '1'
-    minutes = request.form.get('timeout_minutes', '10')
+    minutes_str = request.form.get('timeout_minutes', '')
     
-    try:
-        minutes = int(minutes)
-        if minutes < 1:
-            raise ValueError("Timeout must be at least 1 minute")
-    except ValueError:
-        flash('Invalid timeout value', 'error')
+    # Validate input
+    if not minutes_str.isdigit():
+        flash('Timeout must be a positive number', 'error')
+        return redirect(url_for('admin_notes'))
+    minutes = int(minutes_str)
+    if minutes < 1 or minutes > 1440:  # 1440 minutes = 24 hours
+        flash('Timeout must be between 1 and 1440 minutes', 'error')
         return redirect(url_for('admin_notes'))
     
     Settings.set_setting('timeout_enabled', str(enabled).lower())
     Settings.set_setting('timeout_minutes', str(minutes))
-    
     flash('Session timeout settings updated successfully', 'success')
     return redirect(url_for('admin_notes'))
 
@@ -1386,7 +1490,6 @@ if __name__ == '__main__':
     with app.app_context():
         db.create_all()
         db.create_all(bind=['audit'])
-        
         # Create default admin user if not exists
         if not User.query.filter_by(username='admin').first():
             admin = User(
@@ -1395,7 +1498,6 @@ if __name__ == '__main__':
                 role='admin'
             )
             db.session.add(admin)
-        
         # Create test user if not exists
         if not User.query.filter_by(username='nurse1').first():
             test_user = User(
@@ -1404,11 +1506,8 @@ if __name__ == '__main__':
                 role='user'
             )
             db.session.add(test_user)
-        
         db.session.commit()
-    
-    # Try ports 5000-5010 until we find an available one
-    for port in range(5000, 5011):
+    for port in range(5000, 5011):  # Try ports 5000-5010 until we find an available one
         try:
             app.run(host='0.0.0.0', port=port, debug=True)
             break

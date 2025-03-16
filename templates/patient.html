@@ -128,11 +128,24 @@
 
     <div class="patient-card">
         <div class="patient-info-grid">
+            <!-- Ensure we display all fields in a consistent order -->
+            {% for field in ["Name", "Patient ID", "Ward", "DOB"] %}
+                {% if field in patient_info_dict %}
+                <div class="info-item">
+                    <div class="info-label">{{ field }}</div>
+                    <div class="info-value">{{ patient_info_dict[field] }}</div>
+                </div>
+                {% endif %}
+            {% endfor %}
+            
+            <!-- Display any remaining fields (if any) -->
             {% for field, value in patient_info_dict.items() %}
-            <div class="info-item">
-                <div class="info-label">{{ field }}</div>
-                <div class="info-value">{{ value }}</div>
-            </div>
+                {% if field not in ["Name", "Patient ID", "Ward", "DOB"] %}
+                <div class="info-item">
+                    <div class="info-label">{{ field }}</div>
+                    <div class="info-value">{{ value }}</div>
+                </div>
+                {% endif %}
             {% endfor %}
         </div>
 

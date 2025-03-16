@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{% block title %}Server Error{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="notification is-danger">
+        <h1 class="title">Internal Server Error</h1>
+        <p>An unexpected error has occurred.</p>
+        <p>The administrator has been notified. Please try again later or contact support.</p>
+        <p><a href="{{ url_for('index') }}" class="button is-light mt-4">Return to Home Page</a></p>
+    </div>
+</div>
+{% endblock %}
