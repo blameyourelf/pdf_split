@@ -101,19 +101,19 @@
         <div class="filter-panel">
             <h3 class="filter-title"><i class="fas fa-filter"></i> Filter Notes</h3>
 
-            <form method="GET" action="{{ url_for('admin_notes') }}">
+            <form id="filter-form" method="GET" action="{{ url_for('admin_notes') }}">
                 <div class="filter-form-row">
                     <div class="filter-form-item">
                         <label class="label">Date Range</label>
                         <div class="field has-addons">
                             <div class="control is-expanded">
-                                <input class="input" type="date" name="date_from" value="{{ filters.date_from or '' }}">
+                                <input class="input" type="date" name="date_from" value="{{ filters.date_from or '' }}" id="date-from">
                             </div>
                             <div class="control">
                                 <span class="button is-static">to</span>
                             </div>
                             <div class="control is-expanded">
-                                <input class="input" type="date" name="date_to" value="{{ filters.date_to or '' }}">
+                                <input class="input" type="date" name="date_to" value="{{ filters.date_to or '' }}" id="date-to">
                             </div>
                         </div>
                     </div>
@@ -122,7 +122,7 @@
                         <label class="label">Ward</label>
                         <div class="control">
                             <div class="select is-fullwidth">
-                                <select name="ward">
+                                <select name="ward" id="ward-filter">
                                     <option value="">All Wards</option>
                                     {% for ward_id, ward_info in wards.items() %}
                                         <option value="{{ ward_id }}" {% if filters.ward == ward_id %}selected{% endif %}>
@@ -138,7 +138,7 @@
                         <label class="label">User</label>
                         <div class="control">
                             <div class="select is-fullwidth">
-                                <select name="username">
+                                <select name="username" id="username-filter">
                                     <option value="">All Users</option>
                                     {% for username_item in usernames %}
                                         <option value="{{ username_item }}" {% if filters.username == username_item %}selected{% endif %}>
@@ -170,6 +170,16 @@
                     </div>
                 </div>
             </form>
+
+            <!-- Replace the JavaScript with a simplified, more robust version -->
+            <script>
+                document.addEventListener('DOMContentLoaded', function() {
+                    // Debugging info
+                    console.log("Current ward filter value:", {{ filters.ward|tojson }});
+                    
+                    // The reset button is just a regular link now - simpler and more reliable
+                });
+            </script>
 
             <div class="export-buttons">
                 <a href="{{ url_for('export_notes', format='pdf', ward=filters.ward, username=filters.username, date_from=filters.date_from, date_to=filters.date_to) }}" class="button is-danger is-light">
@@ -234,6 +244,7 @@
                     </tbody>
                 </table>
                 
+                <!-- Update pagination links to properly maintain filters -->
                 {% if pages > 1 %}
                 <nav class="pagination" role="navigation" aria-label="pagination">
                     <a href="{{ url_for('admin_notes', page=prev_page, ward=filters.ward, username=filters.username, date_from=filters.date_from, date_to=filters.date_to) }}" 

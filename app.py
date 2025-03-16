@@ -918,17 +918,16 @@ def admin_notes():
     if current_user.role != 'admin':
         flash('Access denied')
         return redirect(url_for('index'))
-    
-    # Get filter parameters
-    ward_id = request.args.get('ward')
-    username = request.args.get('username')
-    date_from = request.args.get('date_from')
-    date_to = request.args.get('date_to')
+
+    # Get filter parameters with explicit empty defaults
+    ward_id = request.args.get('ward', '')
+    username = request.args.get('username', '')
+    date_from = request.args.get('date_from', '')
+    date_to = request.args.get('date_to', '')
     page = request.args.get('page', 1, type=int)
     
-    # Check if this is a reset request
-    if request.args.get('reset') == '1':
-        return redirect(url_for('admin_notes'))
+    # Debug output to console
+    print(f"Received filter params - ward_id: '{ward_id}', username: '{username}'")
     
     # Build query with filters
     query = CareNote.query
@@ -936,15 +935,19 @@ def admin_notes():
     # Track whether any filters are applied
     filters_applied = False
     
+    # Apply user filter by username
     if username:
         filters_applied = True
-        user_ids = [u.id for u in User.query.filter(User.username.like(f'%{username}%')).all()]
-        if user_ids:
-            query = query.filter(CareNote.user_id.in_(user_ids))
+        # Get all users matching the username pattern
+        matching_users = User.query.filter(User.username.like(f'%{username}%')).all()
+        filtered_user_ids = [u.id for u in matching_users]
+        if filtered_user_ids:
+            query = query.filter(CareNote.user_id.in_(filtered_user_ids))
         else:
             # No matching users, return empty result
             query = query.filter(CareNote.id < 0)
     
+    # Apply date filters
     if date_from:
         filters_applied = True
         try:
@@ -962,10 +965,11 @@ def admin_notes():
         except ValueError:
             pass
     
-    # Ward filtering using ward_id field
-    if ward_id:
+    # Apply ward filter - ensure it's a non-empty string
+    if ward_id and ward_id.strip():
         filters_applied = True
         query = query.filter(CareNote.ward_id == ward_id)
+        print(f"Applied ward filter: {ward_id}")
     
     # Count total matching notes before pagination
     total_notes = query.count()
@@ -975,35 +979,60 @@ def admin_notes():
         page=page, per_page=50, error_out=False
     )
     
-    # Get all user IDs from this page for batch processing
-    user_ids = list(set(note.user_id for note in paginated_notes.items))
-    # Get usernames in a single database query
+    # Get all users from the notes for batch processing
+    user_ids = list(set(note.user_id for note in CareNote.query.with_entities(CareNote.user_id).distinct()))
+    
+    # Get all ward IDs from notes (for filter options)
+    ward_ids_in_notes = set(note.ward_id for note in CareNote.query.with_entities(CareNote.ward_id).distinct() if note.ward_id)
+    
+    # Get usernames in a single database query for display
     users_map = {}
     if user_ids:
         users = User.query.filter(User.id.in_(user_ids)).all()
         users_map = {user.id: user.username for user in users}
     
-    # For ward info, we'll only load data for wards that appear in these notes
-    ward_ids = list(set(note.ward_id for note in paginated_notes.items if note.ward_id))
-    # Preload ward display names to avoid looking up repeatedly
-    ward_display_names = {}
-    for ward_id in ward_ids:
-        if ward_id in wards_data:
-            ward_display_names[ward_id] = wards_data[ward_id].get("display_name", ward_id)
+    # Get ward display names for dropdown
+    available_wards = {}
+    for ward_id in wards_data.keys():
+        available_wards[ward_id] = wards_data[ward_id]
     
-    # Process notes with minimal database and ward data loading
+    # Sort wards alphabetically by display name for better UX
+    available_wards = dict(sorted(
+        available_wards.items(), 
+        key=lambda item: item[1].get('display_name', item[0]).lower()
+    ))
+
+    # Get all available usernames for the filter dropdown from notes
+    available_usernames = sorted([users_map.get(uid) for uid in user_ids if uid in users_map])
+    
+    # Preserve the exact ward_id from request parameters
+    selected_ward = request.args.get('ward', '')
+    print(f"Filter selected_ward: '{selected_ward}'")
+
+    filters = {
+        'ward': selected_ward,
+        'username': username,
+        'date_from': date_from,
+        'date_to': date_to,
+        'applied': filters_applied
+    }
+    
+    # Debug the filters being passed to template
+    print(f"Filters passed to template: {filters}")
+
+    # Process notes for display
     notes = []
     for note in paginated_notes.items:
         # Get ward name efficiently using our preloaded display names
         ward_name = "Unknown"
         if note.ward_id:
-            ward_name = ward_display_names.get(note.ward_id, note.ward_id)
+            ward_name = available_wards.get(note.ward_id, {}).get("display_name", note.ward_id)
         
-        # Use stored patient name - no need to load ward data
+        # Use stored patient name
         patient_name = note.patient_name or "Unknown"
         
         # Get username from our preloaded map
-        username = users_map.get(note.user_id, "Unknown")
+        username_display = users_map.get(note.user_id, "Unknown")
         
         notes.append({
             'timestamp': note.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
@@ -1011,25 +1040,14 @@ def admin_notes():
             'patient_name': patient_name,
             'note': note.note,
             'ward': ward_name,
-            'username': username
+            'username': username_display
         })
-    
-    # Get all available wards for the filter dropdown
-    wards = get_ward_metadata()
-    # Get all usernames for the filter dropdown - use a direct query
-    usernames = [u.username for u in User.query.with_entities(User.username)]
-    
+
     return render_template('admin_notes.html',
                           notes=notes,
-                          wards=wards,
-                          usernames=usernames,
-                          filters={
-                              'ward': ward_id,
-                              'username': username,
-                              'date_from': date_from,
-                              'date_to': date_to,
-                              'applied': filters_applied
-                          },
+                          wards=available_wards,
+                          usernames=available_usernames,
+                          filters=filters,
                           page=page,
                           pages=paginated_notes.pages,
                           total_notes=total_notes,
