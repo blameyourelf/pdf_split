@@ -96,6 +96,22 @@ def generate_patient_stay_notes():
     notes.sort(key=lambda x: datetime.strptime(x[0], "%Y-%m-%d %H:%M"), reverse=True)
     return notes
 
+def generate_extended_patient_stay_notes():
+    # Generate a random number of continuous care notes between 10 and 200 for a patient.
+    num_notes = random.randint(10, 200)
+    notes = []
+    current_date = datetime.now()
+    for _ in range(num_notes):
+        # Random time within the past 90 days
+        delta_minutes = random.randint(0, 60*24*90)
+        note_datetime = current_date - timedelta(minutes=delta_minutes)
+        staff = random.choice(staff_names)
+        note = generate_long_care_note()
+        wrapped_note = Paragraph(note, normal_style)
+        notes.append([note_datetime.strftime("%Y-%m-%d %H:%M"), staff, wrapped_note])
+    notes.sort(key=lambda x: datetime.strptime(x[0], "%Y-%m-%d %H:%M"), reverse=True)
+    return notes
+
 def create_long_stay_pdf(file_path):
     c = canvas.Canvas(file_path, pagesize=letter)
     width, height = letter
@@ -103,22 +119,21 @@ def create_long_stay_pdf(file_path):
     available_width = width - 2*margin
     
     for i in range(24):  # 24 patients per ward
-        # Generate patient info (same as original script)
+        # ...existing patient info generation...
         patient_id = str(random.randint(1000000000, 9999999999))
         name = f"{random.choice(['James', 'Mary', 'John', 'Patricia', 'Robert'])} {random.choice(['Smith', 'Johnson', 'Williams', 'Brown', 'Jones'])}"
         dob = f"{random.randint(1940, 2000)}-{random.randint(1, 12):02d}-{random.randint(1, 28):02d}"
         
-        # Add bookmark for navigation
+        # ...existing bookmark and header...
         c.bookmarkPage(patient_id)
         c.addOutlineEntry(f"Patient: {name} ({patient_id})", patient_id, level=0)
         
-        # Draw header
         y_position = height - margin
         c.setFont("Helvetica-Bold", 16)
         c.drawString(margin, y_position, "Patient Record - Ward Long")
         y_position -= 30
         
-        # Create patient info table
+        # ...existing info table...
         info_data = [
             ["Patient ID:", patient_id],
             ["Name:", name],
@@ -139,14 +154,16 @@ def create_long_stay_pdf(file_path):
         info_table.drawOn(c, margin, y_position - h)
         y_position -= h + 30
         
-        # Create care notes table with more extensive notes
+        # Create care notes table header on the first page only
         c.setFont("Helvetica-Bold", 14)
         c.drawString(margin, y_position, "Continuous Care Notes")
         y_position -= 20
         
-        notes_data = [["Date & Time", "Staff Member", "Notes"]] + generate_patient_stay_notes()
-        notes_table = Table(notes_data, colWidths=[100, 100, available_width-200])
-        notes_table.setStyle(TableStyle([
+        # Get notes data and prepare for table creation
+        all_notes = generate_patient_stay_notes()
+        header_row = ["Date & Time", "Staff Member", "Notes"]
+        col_widths = [100, 100, available_width-200]
+        table_style = TableStyle([
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
             ('FONTSIZE', (0, 0), (-1, -1), 10),
             ('GRID', (0, 0), (-1, -1), 1, colors.lightgrey),
@@ -154,22 +171,261 @@ def create_long_stay_pdf(file_path):
             ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
             ('VALIGN', (0, 0), (-1, -1), 'TOP'),
             ('PADDING', (0, 0), (-1, -1), 6),
-        ]))
+        ])
         
-        # Instead of drawing the whole table at once, split it into fragments that fit.
-        fragments = notes_table.split(available_width, y_position - margin)
-        for frag in fragments:
-            frag_w, frag_h = frag.wrap(available_width, y_position - margin)
-            if y_position - frag_h < margin:
+        # Process notes in chunks to ensure proper pagination
+        remaining_notes = all_notes[:]  # Make a copy of all notes
+        first_chunk = True  # Flag to track if this is the first chunk
+        
+        while remaining_notes:
+            # Calculate available space on current page
+            if first_chunk:
+                available_height = y_position - margin
+            else:
+                available_height = height - margin * 2
+            
+            # Start with header row only for the first chunk
+            current_chunk = []
+            if first_chunk:
+                current_chunk = [header_row]
+            
+            # Add rows until we can't fit any more
+            rows_to_remove = 0
+            for i, note_row in enumerate(remaining_notes):
+                if first_chunk:
+                    # First chunk includes header
+                    test_chunk = current_chunk + [note_row]
+                else:
+                    # Subsequent chunks don't include header
+                    test_chunk = current_chunk + [note_row]
+                
+                test_table = Table(test_chunk, colWidths=col_widths)
+                
+                # Apply style - but with header styling only on first chunk
+                if first_chunk:
+                    test_table.setStyle(table_style)
+                else:
+                    # Remove header-specific styling for continuation chunks
+                    cont_style = TableStyle([
+                        ('FONTSIZE', (0, 0), (-1, -1), 10),
+                        ('GRID', (0, 0), (-1, -1), 1, colors.lightgrey),
+                        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                        ('PADDING', (0, 0), (-1, -1), 6),
+                    ])
+                    test_table.setStyle(cont_style)
+                
+                w, h = test_table.wrap(available_width, height)
+                
+                if h <= available_height:
+                    current_chunk.append(note_row)
+                    rows_to_remove = i + 1
+                else:
+                    # If we couldn't add even one row, force at least one row
+                    if len(current_chunk) == 0 and i == 0:
+                        current_chunk.append(note_row)
+                        rows_to_remove = 1
+                    break
+            
+            # If we have rows to draw, create and draw the table
+            if current_chunk:
+                # Create the final table for this chunk
+                if first_chunk:
+                    chunk_table = Table([header_row] + current_chunk, colWidths=col_widths)
+                    chunk_table.setStyle(table_style)
+                else:
+                    chunk_table = Table(current_chunk, colWidths=col_widths)
+                    # Only apply non-header styles
+                    cont_style = TableStyle([
+                        ('FONTSIZE', (0, 0), (-1, -1), 10),
+                        ('GRID', (0, 0), (-1, -1), 1, colors.lightgrey),
+                        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                        ('PADDING', (0, 0), (-1, -1), 6),
+                    ])
+                    chunk_table.setStyle(cont_style)
+                
+                w, h = chunk_table.wrap(available_width, available_height)
+                
+                # Ensure we have enough space or go to a new page
+                if y_position - h < margin:
+                    c.showPage()
+                    y_position = height - margin
+                
+                chunk_table.drawOn(c, margin, y_position - h)
+                y_position -= h
+            
+            # Remove processed rows
+            remaining_notes = remaining_notes[rows_to_remove:]
+            
+            # If we have more notes, go to a new page
+            if remaining_notes:
                 c.showPage()
                 y_position = height - margin
-            frag.drawOn(c, margin, y_position - frag_h)
-            y_position -= frag_h
+                
+            # No longer the first chunk after the first iteration
+            first_chunk = False
         
-        c.showPage()  # Start a new page for next patient
+        c.showPage()  # Start new page for next patient
+    
+    c.save()
+
+def create_extended_long_stay_pdf(file_path, ward_name):
+    c = canvas.Canvas(file_path, pagesize=letter)
+    width, height = letter
+    margin = 50
+    available_width = width - 2*margin
+    
+    for i in range(24):  # 24 patients per ward
+        # ...existing patient info generation...
+        patient_id = str(random.randint(1000000000, 9999999999))
+        name = f"{random.choice(['James','Mary','John','Patricia','Robert'])} {random.choice(['Smith','Johnson','Williams','Brown','Jones'])}"
+        dob = f"{random.randint(1940,2000)}-{random.randint(1,12):02d}-{random.randint(1,28):02d}"
+        
+        # ...existing bookmark and header...
+        c.bookmarkPage(patient_id)
+        c.addOutlineEntry(f"Patient: {name} ({patient_id})", patient_id, level=0)
+        
+        y_position = height - margin
+        c.setFont("Helvetica-Bold", 16)
+        c.drawString(margin, y_position, f"Patient Record - Ward {ward_name}")
+        y_position -= 30
+        
+        # ...existing info table...
+        info_data = [
+            ["Patient ID:", patient_id],
+            ["Name:", name],
+            ["Ward:", ward_name],
+            ["DOB:", dob]
+        ]
+        info_table = Table(info_data, colWidths=[150, available_width - 150])
+        info_table.setStyle(TableStyle([
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 12),
+            ('GRID', (0, 0), (-1, -1), 1, colors.lightgrey),
+            ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('PADDING', (0, 0), (-1, -1), 6),
+        ]))
+        w, h = info_table.wrap(available_width, y_position)
+        info_table.drawOn(c, margin, y_position - h)
+        y_position -= h + 30
+        
+        # Create care notes table header on the first page only
+        c.setFont("Helvetica-Bold", 14)
+        c.drawString(margin, y_position, "Continuous Care Notes")
+        y_position -= 20
+        
+        # Get notes data and prepare for table creation
+        all_notes = generate_extended_patient_stay_notes()
+        header_row = ["Date & Time", "Staff Member", "Notes"]
+        col_widths = [100, 100, available_width-200]
+        table_style = TableStyle([
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('GRID', (0, 0), (-1, -1), 1, colors.lightgrey),
+            ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('PADDING', (0, 0), (-1, -1), 6),
+        ])
+        
+        # Process notes in chunks to ensure proper pagination
+        remaining_notes = all_notes[:]  # Make a copy of all notes
+        first_chunk = True  # Flag to track if this is the first chunk
+        
+        while remaining_notes:
+            # Calculate available space on current page
+            if first_chunk:
+                available_height = y_position - margin
+            else:
+                available_height = height - margin * 2
+            
+            # Start with header row only for the first chunk
+            current_chunk = []
+            if first_chunk:
+                current_chunk = [header_row]
+            
+            # Add rows until we can't fit any more
+            rows_to_remove = 0
+            for i, note_row in enumerate(remaining_notes):
+                test_chunk = current_chunk + [note_row]
+                test_table = Table(test_chunk, colWidths=col_widths)
+                
+                # Apply style - but with header styling only on first chunk
+                if first_chunk:
+                    test_table.setStyle(table_style)
+                else:
+                    # Remove header-specific styling for continuation chunks
+                    cont_style = TableStyle([
+                        ('FONTSIZE', (0, 0), (-1, -1), 10),
+                        ('GRID', (0, 0), (-1, -1), 1, colors.lightgrey),
+                        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                        ('PADDING', (0, 0), (-1, -1), 6),
+                    ])
+                    test_table.setStyle(cont_style)
+                
+                w, h = test_table.wrap(available_width, height)
+                
+                if h <= available_height:
+                    current_chunk.append(note_row)
+                    rows_to_remove = i + 1
+                else:
+                    # If we couldn't add even one row, force at least one row
+                    if len(current_chunk) == 0 and i == 0:
+                        current_chunk.append(note_row)
+                        rows_to_remove = 1
+                    break
+            
+            # If we have rows to draw, create and draw the table
+            if current_chunk:
+                # Create the final table for this chunk
+                chunk_table = Table(current_chunk, colWidths=col_widths)
+                if first_chunk:
+                    chunk_table.setStyle(table_style)
+                else:
+                    # Only apply non-header styles
+                    cont_style = TableStyle([
+                        ('FONTSIZE', (0, 0), (-1, -1), 10),
+                        ('GRID', (0, 0), (-1, -1), 1, colors.lightgrey),
+                        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                        ('PADDING', (0, 0), (-1, -1), 6),
+                    ])
+                    chunk_table.setStyle(cont_style)
+                
+                w, h = chunk_table.wrap(available_width, available_height)
+                
+                # Ensure we have enough space or go to a new page
+                if y_position - h < margin:
+                    c.showPage()
+                    y_position = height - margin
+                
+                chunk_table.drawOn(c, margin, y_position - h)
+                y_position -= h
+            
+            # Remove processed rows
+            remaining_notes = remaining_notes[rows_to_remove:]
+            
+            # If we have more notes, go to a new page
+            if remaining_notes:
+                c.showPage()
+                y_position = height - margin
+                
+            # No longer the first chunk after the first iteration
+            first_chunk = False
+        
+        c.showPage()  # Start new page for next patient
     
     c.save()
 
 if __name__ == "__main__":
     create_long_stay_pdf("ward_Long_records.pdf")
     print("Generated long-stay ward PDF with extended care notes")
+    
+    # Create 10 new long stay wards with unique names
+    new_long_wards = [f"Long_{i}" for i in range(1, 11)]
+    for ward in new_long_wards:
+        create_extended_long_stay_pdf(f"ward_{ward}_records.pdf", ward)
+    print("Generated long-stay ward PDFs with extended care notes")

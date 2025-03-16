@@ -326,22 +326,7 @@
                     </tr>
                 </thead>
                 <tbody id="care-notes-body">
-                    {% for note in care_notes %}
-                    <tr>
-                        <td>
-                            {% if note.timestamp %}
-                                {{ note.timestamp }}
-                            {% elif note.date %}
-                                {{ note.date }}
-                            {% endif %}
-                            {% if note.is_new %}
-                                <span style="background: #d1fae5; color: #047857; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem;">NEW</span>
-                            {% endif %}
-                        </td>
-                        <td>{{ note.staff if note.staff is defined else 'N/A' }}</td>
-                        <td>{{ note.note }}</td>
-                    </tr>
-                    {% endfor %}
+                    <!-- Initial notes will be loaded here -->
                 </tbody>
             </table>
 
@@ -450,6 +435,142 @@
         }
         
         // Existing functions
+        function searchCareNotes() {
+            const searchTerm = document.getElementById('care-notes-search').value.toLowerCase();
+            const table = document.getElementById('care-notes-table');
+            const rows = table.getElementsByTagName('tr');
+
+            // Start from 1 to skip header row
+            for (let i = 1; i < rows.length; i++) {
+                const row = rows[i];
+                const cells = row.getElementsByTagName('td');
+                let foundMatch = false;
+
+                // Remove existing highlights
+                row.innerHTML = row.innerHTML.replace(/<mark class="highlight">/g, '').replace(/<\/mark>/g, '');
+
+                // Search through all cells in the row
+                for (let cell of cells) {
+                    const text = cell.textContent;
+                    if (text.toLowerCase().includes(searchTerm)) {
+                        foundMatch = true;
+                        if (searchTerm) {
+                            // Create a regex that matches the search term (case insensitive)
+                            const regex = new RegExp(`(${searchTerm})`, 'gi');
+                            // Replace matches with highlighted version
+                            cell.innerHTML = text.replace(regex, '<mark class="highlight">$1</mark>');
+                        }
+                    }
+                }
+
+                // Show/hide row based on search
+                row.style.display = foundMatch || searchTerm === '' ? '' : 'none';
+            }
+        }
+
+        function showAddNoteModal() {
+            document.getElementById('add-note-modal').classList.add('is-active');
+            // Focus the textarea after modal is shown
+            setTimeout(() => {
+                document.getElementById('note-text').focus();
+            }, 100);
+        }
+
+        function closeAddNoteModal() {
+            document.getElementById('add-note-modal').classList.remove('is-active');
+            document.getElementById('note-text').value = '';
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            // Display first 20 notes immediately for quick initial render
+            const allNotes = {{ care_notes|tojson }};
+            displayInitialNotes(allNotes.slice(0, 20));
+            
+            // Load the rest of the notes after a slight delay using animation frames
+            setTimeout(() => {
+                requestAnimationFrame(() => loadRemainingNotes(allNotes, 20));
+            }, 100);
+        });
+        
+        function displayInitialNotes(notes) {
+            const tableBody = document.getElementById('care-notes-body');
+            tableBody.innerHTML = '';
+            
+            notes.forEach(note => {
+                const row = createNoteRow(note);
+                tableBody.appendChild(row);
+            });
+        }
+        
+        function loadRemainingNotes(allNotes, startIndex) {
+            const tableBody = document.getElementById('care-notes-body');
+            const totalNotes = allNotes.length;
+            
+            // Process notes in batches to keep the UI responsive
+            const processBatch = (index) => {
+                const endIndex = Math.min(index + 20, totalNotes);
+                
+                for (let i = index; i < endIndex; i++) {
+                    const row = createNoteRow(allNotes[i]);
+                    tableBody.appendChild(row);
+                }
+                
+                if (endIndex < totalNotes) {
+                    // Schedule next batch using requestAnimationFrame
+                    requestAnimationFrame(() => processBatch(endIndex));
+                }
+            };
+            
+            processBatch(startIndex);
+        }
+        
+        function createNoteRow(note) {
+            const row = document.createElement('tr');
+            
+            // Date column - handle both formats (timestamp or date)
+            const dateCell = document.createElement('td');
+            if (note.timestamp) {
+                dateCell.textContent = note.timestamp;
+            } else if (note.date) {
+                dateCell.textContent = note.date;
+            }
+            
+            // Add "NEW" badge if needed
+            if (note.is_new) {
+                const badge = document.createElement('span');
+                badge.style.background = '#d1fae5';
+                badge.style.color = '#047857';
+                badge.style.padding = '0.2rem 0.5rem';
+                badge.style.borderRadius = '4px';
+                badge.style.fontSize = '0.75rem';
+                badge.textContent = 'NEW';
+                dateCell.appendChild(document.createTextNode(' '));
+                dateCell.appendChild(badge);
+            }
+            
+            // Staff column
+            const staffCell = document.createElement('td');
+            staffCell.textContent = note.staff || 'N/A';
+            
+            // Note column
+            const noteCell = document.createElement('td');
+            // Handle notes with newlines by preserving formatting
+            if (note.note && note.note.includes('\n')) {
+                noteCell.innerHTML = note.note.replace(/\n/g, '<br>');
+                noteCell.style.whiteSpace = 'pre-wrap';
+            } else {
+                noteCell.textContent = note.note || '';
+            }
+            
+            // Add to row
+            row.appendChild(dateCell);
+            row.appendChild(staffCell);
+            row.appendChild(noteCell);
+            
+            return row;
+        }
+        
+        // Keep existing search function
         function searchCareNotes() {
             const searchTerm = document.getElementById('care-notes-search').value.toLowerCase();
             const table = document.getElementById('care-notes-table');
