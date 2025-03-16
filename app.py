@@ -178,73 +178,88 @@ def extract_patient_info(pdf_path, patient_id=None):
                         current_patient["info"]["DOB"] = dob_match.group(1).strip()
                 
                 # Check for care notes section
-                if "Continuous Care Notes" in text:
+                if "Continuous Care Notes" in text and not in_care_notes:
                     in_care_notes = True
                 
                 # Extract care notes if we're in that section
                 if in_care_notes and current_patient:
-                    # Try to extract the care notes table
-                    care_notes_section = text.split("Continuous Care Notes", 1)
+                    # If we're continuing from a previous page, just use the whole text
+                    care_notes_text = ""
+                    if "Continuous Care Notes" in text:
+                        # If this page has the header, extract notes from after that
+                        care_notes_section = text.split("Continuous Care Notes", 1)
+                        if len(care_notes_section) > 1:
+                            care_notes_text = care_notes_section[1].strip()
+                    else:
+                        # If we're continuing from previous page, use the whole text
+                        care_notes_text = text
                     
-                    if len(care_notes_section) > 1:
-                        notes_text = care_notes_section[1].strip()
+                    # Check if there's a header row on this page
+                    if "Date & Time" in care_notes_text and "Staff Member" in care_notes_text and "Notes" in care_notes_text:
+                        # Remove header row
+                        header_pos = care_notes_text.find("Notes")
+                        if header_pos > 0:
+                            header_end = care_notes_text.find("\n", header_pos)
+                            if header_end > 0:
+                                care_notes_text = care_notes_text[header_end:].strip()
+                    
+                    # Now process the actual notes - try the long notes format first
+                    care_notes_pattern = r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2})\s+([^,]+(?:, [A-Z]+)?)\s+(.+?)(?=(?:\d{4}-\d{2}-\d{2} \d{2}:\d{2})|$)"
+                    matches = list(re.finditer(care_notes_pattern, care_notes_text, re.DOTALL))
+                    
+                    if matches:
+                        # Long notes format worked
+                        for match in matches:
+                            date = match.group(1).strip()
+                            staff = match.group(2).strip()
+                            note = match.group(3).strip()
+                            
+                            if date and staff and note:
+                                current_patient["care_notes"].append({
+                                    "date": date,
+                                    "staff": staff,
+                                    "note": note
+                                })
+                    else:
+                        # Try alternative format - splitting by lines and looking for date patterns
+                        lines = care_notes_text.split('\n')
+                        i = 0
                         
-                        # Check for header row
-                        if "Date & Time" in notes_text and "Staff Member" in notes_text and "Notes" in notes_text:
-                            # Remove header row
-                            header_pos = notes_text.find("Notes")
-                            if header_pos > 0:
-                                header_end = notes_text.find("\n", header_pos)
-                                if header_end > 0:
-                                    notes_text = notes_text[header_end:].strip()
+                        while i < len(lines):
+                            # Skip empty lines
+                            if not lines[i].strip():
+                                i += 1
+                                continue
                             
-                            # Now process the actual notes
-                            # Try the long notes format first (more specific pattern)
-                            care_notes_pattern = r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2})\s+([^,]+, [A-Z]+)\s+(.+?)(?=(?:\d{4}-\d{2}-\d{2} \d{2}:\d{2})|$)"
-                            matches = list(re.finditer(care_notes_pattern, notes_text, re.DOTALL))
+                            # Look for date time pattern at start of line
+                            date_match = re.match(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2})", lines[i].strip())
                             
-                            if matches:
-                                # Long notes format worked
-                                for match in matches:
-                                    date = match.group(1).strip()
-                                    staff = match.group(2).strip()
-                                    note = match.group(3).strip()
-                                    
-                                    if date and staff and note:
-                                        current_patient["care_notes"].append({
-                                            "date": date,
-                                            "staff": staff,
-                                            "note": note
-                                        })
-                            else:
-                                # Try regular notes format with simpler parsing
-                                lines = notes_text.split('\n')
-                                i = 0
+                            if date_match:
+                                date = date_match.group(1)
+                                # Extract rest of line after date
+                                line_parts = lines[i][len(date):].strip().split("  ", 1)
                                 
-                                while i < len(lines):
-                                    # Skip empty lines
-                                    if not lines[i].strip():
-                                        i += 1
-                                        continue
+                                if len(line_parts) > 1:
+                                    staff = line_parts[0].strip()
+                                    note_start = line_parts[1].strip()
                                     
-                                    # Look for date time pattern at start of line
-                                    date_match = re.match(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2})", lines[i].strip())
+                                    # Check for multi-line notes
+                                    note_lines = [note_start]
+                                    j = i + 1
+                                    while j < len(lines) and not re.match(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}", lines[j].strip()):
+                                        if lines[j].strip():  # Only add non-empty lines
+                                            note_lines.append(lines[j].strip())
+                                        j += 1
                                     
-                                    if date_match:
-                                        date = date_match.group(1)
-                                        # Extract rest of line after date
-                                        line_parts = lines[i][len(date):].strip().split("  ", 1)
-                                        
-                                        if len(line_parts) > 1:
-                                            staff = line_parts[0].strip()
-                                            note = line_parts[1].strip()
-                                            
-                                            current_patient["care_notes"].append({
-                                                "date": date,
-                                                "staff": staff,
-                                                "note": note
-                                            })
-                                    i += 1
+                                    full_note = "\n".join(note_lines)
+                                    current_patient["care_notes"].append({
+                                        "date": date,
+                                        "staff": staff,
+                                        "note": full_note
+                                    })
+                                    
+                                    i = j - 1  # Move to the last processed line
+                            i += 1
         
         # Handle last patient
         if current_patient_id and current_patient:

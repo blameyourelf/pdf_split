@@ -6,6 +6,7 @@ from reportlab.platypus import Table, TableStyle, Paragraph  # added Paragraph i
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet               # added stylesheet import
 from datetime import datetime, timedelta
+import os
 
 # Get the default style for wrapping
 styles = getSampleStyleSheet()
@@ -17,6 +18,29 @@ staff_names = [
     "David Wilson, RN", "Lisa Anderson, NP", "John Davis, RN",
     "Maria Garcia, RN", "James Lee, RN", "Rachel Brown, NP",
     "Kevin Patel, RN"
+]
+
+# Import ward names from generate_pdf.py
+# Numeric ward names (1-50)
+numeric_wards = list(map(str, range(1, 51)))
+
+# Special ward names from generate_pdf.py
+special_wards = [
+    "ACU",  # Acute Care Unit
+    "CCU",  # Critical Care Unit
+    "HDU",  # High Dependency Unit
+    "ICU",  # Intensive Care Unit
+    "MAU",  # Medical Assessment Unit
+    "NICU", # Neonatal Intensive Care Unit
+    "Maple",  # Named wards
+    "Oak",
+    "Pine",
+    "Willow",
+    "Sunflower",
+    "Rose",
+    "ED",  # Emergency Department
+    "Maternity",
+    "Pediatrics"
 ]
 
 # Extended care note templates for longer entries
@@ -420,12 +444,35 @@ def create_extended_long_stay_pdf(file_path, ward_name):
     
     c.save()
 
-if __name__ == "__main__":
-    create_long_stay_pdf("ward_Long_records.pdf")
-    print("Generated long-stay ward PDF with extended care notes")
+def remove_existing_pdfs():
+    """Remove existing PDF files that match the ward naming pattern"""
+    removed_count = 0
+    for filename in os.listdir('.'):
+        if filename.startswith('ward_') and filename.endswith('_records.pdf'):
+            try:
+                os.remove(filename)
+                removed_count += 1
+            except:
+                print(f"Could not remove {filename}")
     
-    # Create 10 new long stay wards with unique names
-    new_long_wards = [f"Long_{i}" for i in range(1, 11)]
-    for ward in new_long_wards:
-        create_extended_long_stay_pdf(f"ward_{ward}_records.pdf", ward)
-    print("Generated long-stay ward PDFs with extended care notes")
+    print(f"Removed {removed_count} existing PDF files")
+
+if __name__ == "__main__":
+    # Ask user if they want to remove existing PDFs
+    response = input("Do you want to remove existing PDF files? (y/n): ")
+    if response.lower() == 'y':
+        remove_existing_pdfs()
+    
+    print("Generating ward PDFs with extended care notes...")
+    
+    # Create PDFs for all numeric wards (1-50)
+    for ward_num in numeric_wards:
+        print(f"Generating ward_{ward_num}_records.pdf")
+        create_extended_long_stay_pdf(f"ward_{ward_num}_records.pdf", ward_num)
+    
+    # Create PDFs for special wards with non-numeric names
+    for ward_name in special_wards:
+        print(f"Generating ward_{ward_name}_records.pdf")
+        create_extended_long_stay_pdf(f"ward_{ward_name}_records.pdf", ward_name)
+        
+    print(f"Generated {len(numeric_wards) + len(special_wards)} ward PDFs successfully!")
