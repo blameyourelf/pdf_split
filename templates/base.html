@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Contingency EPR Digital Notes Viewer{% endblock %}</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.9.3/css/bulma.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        /* Common styles */
+        body {
+            padding: 20px;
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc;
+            min-height: 100vh;
+        }
+        .navbar {
+            background: white;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+            padding: 1rem 2rem;
+            margin-bottom: 2rem;
+        }
+        .navbar-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        .admin-dropdown:hover .dropdown-menu {
+            display: block;
+        }
+        .dropdown-menu {
+            min-width: 200px;
+        }
+        .dropdown-content {
+            padding: 0;
+        }
+        .dropdown-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.7rem 1rem;
+        }
+        .dropdown-item i {
+            width: 1.25em;
+            text-align: center;
+        }
+        .context-actions {
+            margin-left: auto;
+            margin-right: 1rem;
+        }
+    </style>
+    {% block extra_styles %}{% endblock %}
+</head>
+<body>
+    <nav class="navbar">
+        <div class="navbar-content">
+            <div class="user-info">
+                <i class="fas fa-user"></i>
+                Welcome, {{ current_user.username }}
+            </div>
+
+            <div class="context-actions">
+                {% block context_actions %}{% endblock %}
+            </div>
+
+            <div class="nav-actions">
+                {% if current_user.role == 'admin' %}
+                <div class="dropdown is-hoverable admin-dropdown">
+                    <div class="dropdown-trigger">
+                        <button class="button is-primary is-light">
+                            <span class="icon">
+                                <i class="fas fa-cog"></i>
+                            </span>
+                            <span>Admin</span>
+                            <span class="icon">
+                                <i class="fas fa-angle-down"></i>
+                            </span>
+                        </button>
+                    </div>
+                    <div class="dropdown-menu">
+                        <div class="dropdown-content">
+                            <a href="{{ url_for('admin_notes') }}" class="dropdown-item">
+                                <i class="fas fa-clipboard-check"></i>
+                                Notes Dashboard
+                            </a>
+                            <a href="{{ url_for('view_audit_log') }}" class="dropdown-item">
+                                <i class="fas fa-history"></i>
+                                View Audit Log
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+                <a href="{{ url_for('my_shift_notes') }}" class="button is-info is-light mr-2">
+                    <span class="icon">
+                        <i class="fas fa-clipboard-list"></i>
+                    </span>
+                    <span>My Shift Notes</span>
+                </a>
+
+                <a href="{{ url_for('profile') }}" class="button is-light mr-2">
+                    <span class="icon">
+                        <i class="fas fa-hospital"></i>
+                    </span>
+                    <span>Default Ward</span>
+                </a>
+
+                <a href="{{ url_for('logout') }}" class="button is-danger is-light">
+                    <span class="icon">
+                        <i class="fas fa-sign-out-alt"></i>
+                    </span>
+                    <span>Logout</span>
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        {% block content %}{% endblock %}
+    </div>
+</body>
+</html>

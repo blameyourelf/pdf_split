@@ -1,621 +1,422 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Patient {{ patient_id }} - Ward {{ ward_num }}</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.min.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.9.3/css/bulma.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <meta name="csrf-token" content="{{ csrf_token() }}">
-    <style>
-        body {
-            padding: 20px;
-            font-family: 'Inter', sans-serif;
-            background-color: #f8fafc;
-            min-height: 100vh;
-        }
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 2rem;
-        }
-        .title {
-            color: #1a365d;
-            font-weight: 700;
-            font-size: 2.5rem;
-            margin-bottom: 1rem;
-        }
-        .subtitle {
-            color: #4a5568;
-            margin-bottom: 2rem;
-            font-size: 1.1rem;
-        }
-        .patient-card {
-            background: white;
-            border-radius: 12px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
-            padding: 2rem;
-            margin-bottom: 2rem;
-        }
-        .patient-info {
-            white-space: pre-wrap;
-            font-family: 'Inter', sans-serif;
-            color: #2d3748;
-            line-height: 1.6;
-        }
-        .navigation {
-            display: flex;
-            gap: 1rem;
-            margin-bottom: 2rem;
-        }
-        .nav-button {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            padding: 0.75rem 1.5rem;
-            border-radius: 8px;
-            transition: all 0.3s ease;
-            font-weight: 500;
-            text-decoration: none;
-        }
-        .back-to-ward {
-            background-color: #4299e1;
-            color: white;
-        }
-        .back-to-ward:hover {
-            background-color: #3182ce;
-            transform: translateY(-1px);
-            color: white;
-        }
-        .back-to-home {
-            background-color: #718096;
-            color: white;
-        }
-        .back-to-home:hover {
-            background-color: #4a5568;
-            transform: translateY(-1px);
-            color: white;
-        }
-        .patient-header {
-            margin-bottom: 2rem;
-        }
-        .ward-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            background-color: #ebf8ff;
-            color: #2b6cb0;
-            padding: 0.5rem 1rem;
-            border-radius: 9999px;
-            font-weight: 500;
-            margin-bottom: 1rem;
-        }
-        .navbar {
-            background: white;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-            padding: 1rem 2rem;
-            margin-bottom: 2rem;
-        }
-        .navbar-content {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-        .user-nav {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-        }
-        .username {
-            color: #4a5568;
-            font-weight: 500;
-        }
-        .audit-link {
-            color: #4299e1;
-            text-decoration: none;
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-        .audit-link:hover {
-            color: #3182ce;
-        }
-        .logout-button {
-            background-color: #fff5f5;
-            color: #c53030;
-            border: none;
-            padding: 0.5rem 1rem;
-            border-radius: 8px;
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            cursor: pointer;
-            text-decoration: none;
-            transition: all 0.3s ease;
-        }
-        .logout-button:hover {
-            background-color: #fed7d7;
-            color: #c53030;
-        }
-        .care-notes-table {
-            width: 100%;
-            margin-top: 2rem;
-            border-collapse: collapse;
-        }
-        .care-notes-table th {
-            background-color: #f7fafc;
-            color: #4a5568;
-            font-weight: 600;
-            text-transform: uppercase;
-            font-size: 0.75rem;
-            letter-spacing: 0.05em;
-            padding: 1rem;
-            text-align: left;
-            border-bottom: 2px solid #e2e8f0;
-        }
-        .care-notes-table td {
-            padding: 1rem;
-            border-bottom: 1px solid #e2e8f0;
-            color: #2d3748;
-            font-size: 0.875rem;
-            vertical-align: top;
-        }
-        .care-notes-table tr:hover {
-            background-color: #f7fafc;
-        }
-        .patient-info-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1rem;
-            margin-bottom: 2rem;
-        }
-        .info-item {
-            background: #f7fafc;
-            padding: 1rem;
-            border-radius: 8px;
-        }
-        .info-label {
-            color: #4a5568;
-            font-size: 0.875rem;
-            font-weight: 500;
-            margin-bottom: 0.5rem;
-        }
-        .info-value {
-            color: #2d3748;
-            font-size: 1rem;
-            font-weight: 600;
-        }
-        .vitals-section {
-            background: #fff5f7;
-            padding: 1rem;
-            border-radius: 8px;
-            margin-bottom: 2rem;
-        }
-        .vitals-title {
-            color: #702459;
-            font-weight: 600;
-            margin-bottom: 0.5rem;
-        }
-        .section-title {
-            color: #2d3748;
-            font-size: 1.25rem;
-            font-weight: 600;
-            margin-bottom: 1rem;
-            padding-bottom: 0.5rem;
-            border-bottom: 2px solid #e2e8f0;
-        }
-        .loading {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 2rem;
-        }
-        .loading-spinner {
-            animation: spin 1s linear infinite;
-            font-size: 2rem;
-            color: #4299e1;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        /* Add this new style for highlighted text */
-        .highlight {
-            background-color: #fef08a;
-            padding: 0 2px;
-            border-radius: 2px;
-        }
-    </style>
-</head>
-<body>
-    <nav class="navbar">
-        <div class="navbar-content">
-            <div class="username">
-                <i class="fas fa-user"></i>
-                Welcome, {{ current_user.username }}
-            </div>
-            <div class="user-nav">
-                {% if current_user.role == 'admin' %}
-                <a href="{{ url_for('view_audit_log') }}" class="audit-link">
-                    <i class="fas fa-history"></i>
-                    View Audit Log
-                </a>
-                {% endif %}
-                <a href="{{ url_for('logout') }}" class="logout-button">
-                    <i class="fas fa-sign-out-alt"></i>
-                    Logout
-                </a>
-            </div>
+{% extends "base.html" %}
+
+{% block title %}Patient {{ patient_id }} - Ward {{ ward_num }}{% endblock %}
+
+{% block extra_styles %}
+<style>
+    .patient-card {
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+        padding: 2rem;
+        margin-bottom: 2rem;
+    }
+    .patient-header {
+        margin-bottom: 2rem;
+    }
+    .ward-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        background-color: #ebf8ff;
+        color: #2b6cb0;
+        padding: 0.5rem 1rem;
+        border-radius: 9999px;
+        font-weight: 500;
+        margin-bottom: 1rem;
+    }
+    .patient-info-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+        margin-bottom: 2rem;
+    }
+    .info-item {
+        background: #f7fafc;
+        padding: 1rem;
+        border-radius: 8px;
+    }
+    .info-label {
+        color: #4a5568;
+        font-size: 0.875rem;
+        font-weight: 500;
+        margin-bottom: 0.5rem;
+    }
+    .info-value {
+        color: #2d3748;
+        font-size: 1rem;
+        font-weight: 600;
+    }
+    .care-notes-table {
+        width: 100%;
+        margin-top: 2rem;
+        border-collapse: collapse;
+    }
+    .care-notes-table th {
+        background-color: #f7fafc;
+        color: #4a5568;
+        font-weight: 600;
+        text-transform: uppercase;
+        font-size: 0.75rem;
+        letter-spacing: 0.05em;
+        padding: 1rem;
+        text-align: left;
+        border-bottom: 2px solid #e2e8f0;
+    }
+    .care-notes-table td {
+        padding: 1rem;
+        border-bottom: 1px solid #e2e8f0;
+        color: #2d3748;
+        font-size: 0.875rem;
+        vertical-align: top;
+    }
+    .care-notes-table tr:hover {
+        background-color: #f7fafc;
+    }
+    .section-title {
+        color: #2d3748;
+        font-size: 1.25rem;
+        font-weight: 600;
+        margin-bottom: 1rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 2px solid #e2e8f0;
+    }
+    .vitals-section {
+        background: #fff5f7;
+        padding: 1rem;
+        border-radius: 8px;
+        margin-bottom: 2rem;
+    }
+    .vitals-title {
+        color: #702459;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+    }
+    /* Add this new style for highlighted text */
+    .highlight {
+        background-color: #fef08a;
+        padding: 0 2px;
+        border-radius: 2px;
+    }
+</style>
+{% endblock %}
+
+{% block context_actions %}
+<div class="buttons">
+    <a href="/ward/{{ ward_num }}" class="button is-info is-light">
+        <span class="icon">
+            <i class="fas fa-hospital"></i>
+        </span>
+        <span>Back to {% if ward_num.isdigit() %}Ward {{ ward_num }}{% else %}{{ ward_num }}{% endif %}</span>
+    </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="patient-header">
+        <div class="ward-badge">
+            <i class="fas fa-hospital-user"></i>
+            {% if ward_num.isdigit() %}Ward {{ ward_num }}{% else %}{{ ward_num }}{% endif %}
         </div>
-    </nav>
-
-    <div class="container">
-        <div class="navigation">
-            <a href="/ward/{{ ward_num }}" class="nav-button back-to-ward">
-                <i class="fas fa-arrow-left"></i>
-                Back to {% if ward_num.isdigit() %}Ward {{ ward_num }}{% else %}{{ ward_num }}{% endif %}
-            </a>
-            <a href="/" class="nav-button back-to-home">
-                <i class="fas fa-home"></i>
-                Home
-            </a>
-        </div>
-
-        <div class="patient-header">
-            <div class="ward-badge">
-                <i class="fas fa-hospital-user"></i>
-                {% if ward_num.isdigit() %}Ward {{ ward_num }}{% else %}{{ ward_num }}{% endif %}
-            </div>
-            <h1 class="title">Patient Record</h1>
-            <p class="subtitle">{{ pdf_filename }}</p>
-            <p class="subtitle" style="font-size: 0.9rem; color: #718096;">
-                Snapshot taken at: {{ pdf_creation_time }}
-            </p>
-        </div>
-
-        <div class="patient-card">
-            <div class="patient-info-grid">
-                {% for field, value in patient_info_dict.items() %}
-                <div class="info-item">
-                    <div class="info-label">{{ field }}</div>
-                    <div class="info-value">{{ value }}</div>
-                </div>
-                {% endfor %}
-            </div>
-
-            {% if vitals %}
-            <div class="vitals-section">
-                <div class="vitals-title">Current Vital Signs</div>
-                <div>{{ vitals }}</div>
-            </div>
-            {% endif %}
-
-            <h3 class="section-title">
-                <i class="fas fa-notes-medical"></i>
-                Continuous Care Notes
-                <button onclick="showAddNoteModal()" class="button is-primary is-small ml-4">
-                    <span class="icon is-small">
-                        <i class="fas fa-plus"></i>
-                    </span>
-                    <span>Add Note</span>
-                </button>
-            </h3>
-
-            <!-- Add search box -->
-            <div class="field mb-4">
-                <div class="control has-icons-left">
-                    <input class="input" type="text" id="care-notes-search" 
-                           placeholder="Search care notes..." 
-                           oninput="searchCareNotes()">
-                    <span class="icon is-left">
-                        <i class="fas fa-search"></i>
-                    </span>
-                </div>
-            </div>
-
-            <table class="care-notes-table" id="care-notes-table">
-                <thead>
-                    <tr>
-                        <th>Date & Time</th>
-                        <th>Staff Member</th>
-                        <th>Notes</th>
-                    </tr>
-                </thead>
-                <tbody id="care-notes-body">
-                    <!-- Initial notes will be loaded here -->
-                </tbody>
-            </table>
-
-            {% if has_more_notes %}
-            <div class="has-text-centered mt-4">
-                <button id="load-more-btn" class="button is-info is-light" onclick="loadMoreNotes(50)">
-                    <span class="icon">
-                        <i class="fas fa-plus"></i>
-                    </span>
-                    <span>Load More Notes</span>
-                </button>
-                <div id="loading-more" class="mt-2" style="display: none;">
-                    <span class="icon">
-                        <i class="fas fa-spinner fa-spin"></i>
-                    </span>
-                    Loading more notes...
-                </div>
-            </div>
-            {% endif %}
-        </div>
+        <h1 class="title">Patient Record</h1>
+        <p class="subtitle">{{ pdf_filename }}</p>
+        <p class="subtitle" style="font-size: 0.9rem; color: #718096;">
+            Snapshot taken at: {{ pdf_creation_time }}
+        </p>
     </div>
 
-    <!-- Add Note Modal -->
-    <div class="modal" id="add-note-modal">
-        <div class="modal-background"></div>
-        <div class="modal-card">
-            <header class="modal-card-head">
-                <p class="modal-card-title">Add Care Note</p>
-                <button class="delete" aria-label="close" onclick="closeAddNoteModal()"></button>
-            </header>
-            <section class="modal-card-body">
-                <form id="note-form" method="POST" action="/add_care_note/{{ patient_id }}">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <div class="field">
-                        <label class="label">Note</label>
-                        <div class="control">
-                            <textarea class="textarea" id="note-text" name="note" placeholder="Enter care note..."></textarea>
-                        </div>
+    <div class="patient-card">
+        <div class="patient-info-grid">
+            {% for field, value in patient_info_dict.items() %}
+            <div class="info-item">
+                <div class="info-label">{{ field }}</div>
+                <div class="info-value">{{ value }}</div>
+            </div>
+            {% endfor %}
+        </div>
+
+        {% if vitals %}
+        <div class="vitals-section">
+            <div class="vitals-title">Current Vital Signs</div>
+            <div>{{ vitals }}</div>
+        </div>
+        {% endif %}
+
+        <h3 class="section-title">
+            <i class="fas fa-notes-medical"></i>
+            Continuous Care Notes
+            <button onclick="showAddNoteModal()" class="button is-primary is-small ml-4">
+                <span class="icon is-small">
+                    <i class="fas fa-plus"></i>
+                </span>
+                <span>Add Note</span>
+            </button>
+        </h3>
+
+        <!-- Add search box -->
+        <div class="field mb-4">
+            <div class="control has-icons-left">
+                <input class="input" type="text" id="care-notes-search" 
+                       placeholder="Search care notes..." 
+                       oninput="searchCareNotes()">
+                <span class="icon is-left">
+                    <i class="fas fa-search"></i>
+                </span>
+            </div>
+        </div>
+
+        <table class="care-notes-table" id="care-notes-table">
+            <thead>
+                <tr>
+                    <th>Date & Time</th>
+                    <th>Staff Member</th>
+                    <th>Notes</th>
+                </tr>
+            </thead>
+            <tbody id="care-notes-body">
+                <!-- Initial notes will be loaded here -->
+            </tbody>
+        </table>
+
+        {% if has_more_notes %}
+        <div class="has-text-centered mt-4">
+            <button id="load-more-btn" class="button is-info is-light" onclick="loadMoreNotes(50)">
+                <span class="icon">
+                    <i class="fas fa-plus"></i>
+                </span>
+                <span>Load More Notes</span>
+            </button>
+            <div id="loading-more" class="mt-2" style="display: none;">
+                <span class="icon">
+                    <i class="fas fa-spinner fa-spin"></i>
+                </span>
+                Loading more notes...
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Add Note Modal -->
+<div class="modal" id="add-note-modal">
+    <div class="modal-background"></div>
+    <div class="modal-card">
+        <header class="modal-card-head">
+            <p class="modal-card-title">Add Care Note</p>
+            <button class="delete" aria-label="close" onclick="closeAddNoteModal()"></button>
+        </header>
+        <section class="modal-card-body">
+            <form id="note-form" method="POST" action="/add_care_note/{{ patient_id }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="field">
+                    <label class="label">Note</label>
+                    <div class="control">
+                        <textarea class="textarea" id="note-text" name="note" placeholder="Enter care note..."></textarea>
                     </div>
-                    <footer class="modal-card-foot">
-                        <button class="button is-primary" type="submit">Save Note</button>
-                        <button class="button" onclick="closeAddNoteModal()">Cancel</button>
-                    </footer>
-                </form>
-            </section>
-        </div>
+                </div>
+                <footer class="modal-card-foot">
+                    <button class="button is-primary" type="submit">Save Note</button>
+                    <button class="button" onclick="closeAddNoteModal()">Cancel</button>
+                </footer>
+            </form>
+        </section>
     </div>
+</div>
 
-    <script>
-        // Add function to load more notes on demand
-        let currentOffset = 50; // Start after the initial 50 notes
+<script>
+    // Add function to load more notes on demand
+    let currentOffset = 50; // Start after the initial 50 notes
+    
+    async function loadMoreNotes(offset) {
+        const loadingIndicator = document.getElementById('loading-more');
+        const loadMoreBtn = document.getElementById('load-more-btn');
         
-        async function loadMoreNotes(offset) {
-            const loadingIndicator = document.getElementById('loading-more');
-            const loadMoreBtn = document.getElementById('load-more-btn');
+        try {
+            loadingIndicator.style.display = 'block';
+            loadMoreBtn.disabled = true;
             
-            try {
-                loadingIndicator.style.display = 'block';
-                loadMoreBtn.disabled = true;
-                
-                const response = await fetch(`/load_more_notes/{{ patient_id }}/${offset}`);
-                if (!response.ok) {
-                    throw new Error('Failed to load more notes');
-                }
-                
-                const data = await response.json();
-                const tableBody = document.getElementById('care-notes-body');
-                
-                // Add new rows to the table
-                data.notes.forEach(note => {
-                    const row = document.createElement('tr');
-                    
-                    // Date column
-                    const dateCell = document.createElement('td');
-                    dateCell.textContent = note.date;
-                    row.appendChild(dateCell);
-                    
-                    // Staff column
-                    const staffCell = document.createElement('td');
-                    staffCell.textContent = note.staff;
-                    row.appendChild(staffCell);
-                    
-                    // Note column
-                    const noteCell = document.createElement('td');
-                    noteCell.textContent = note.note;
-                    row.appendChild(noteCell);
-                    
-                    // Add to table
-                    tableBody.appendChild(row);
-                });
-                
-                // Update offset for next load
-                currentOffset += data.notes.length;
-                
-                // Hide button if no more notes
-                if (!data.has_more) {
-                    loadMoreBtn.style.display = 'none';
-                }
-                
-            } catch (error) {
-                console.error('Error loading more notes:', error);
-            } finally {
-                loadingIndicator.style.display = 'none';
-                loadMoreBtn.disabled = false;
+            const response = await fetch(`/load_more_notes/{{ patient_id }}/${offset}`);
+            if (!response.ok) {
+                throw new Error('Failed to load more notes');
             }
-        }
-        
-        // Existing functions
-        function searchCareNotes() {
-            const searchTerm = document.getElementById('care-notes-search').value.toLowerCase();
-            const table = document.getElementById('care-notes-table');
-            const rows = table.getElementsByTagName('tr');
-
-            // Start from 1 to skip header row
-            for (let i = 1; i < rows.length; i++) {
-                const row = rows[i];
-                const cells = row.getElementsByTagName('td');
-                let foundMatch = false;
-
-                // Remove existing highlights
-                row.innerHTML = row.innerHTML.replace(/<mark class="highlight">/g, '').replace(/<\/mark>/g, '');
-
-                // Search through all cells in the row
-                for (let cell of cells) {
-                    const text = cell.textContent;
-                    if (text.toLowerCase().includes(searchTerm)) {
-                        foundMatch = true;
-                        if (searchTerm) {
-                            // Create a regex that matches the search term (case insensitive)
-                            const regex = new RegExp(`(${searchTerm})`, 'gi');
-                            // Replace matches with highlighted version
-                            cell.innerHTML = text.replace(regex, '<mark class="highlight">$1</mark>');
-                        }
-                    }
-                }
-
-                // Show/hide row based on search
-                row.style.display = foundMatch || searchTerm === '' ? '' : 'none';
-            }
-        }
-
-        function showAddNoteModal() {
-            document.getElementById('add-note-modal').classList.add('is-active');
-            // Focus the textarea after modal is shown
-            setTimeout(() => {
-                document.getElementById('note-text').focus();
-            }, 100);
-        }
-
-        function closeAddNoteModal() {
-            document.getElementById('add-note-modal').classList.remove('is-active');
-            document.getElementById('note-text').value = '';
-        }
-
-        document.addEventListener('DOMContentLoaded', function() {
-            // Display first 20 notes immediately for quick initial render
-            const allNotes = {{ care_notes|tojson }};
-            displayInitialNotes(allNotes.slice(0, 20));
             
-            // Load the rest of the notes after a slight delay using animation frames
-            setTimeout(() => {
-                requestAnimationFrame(() => loadRemainingNotes(allNotes, 20));
-            }, 100);
-        });
-        
-        function displayInitialNotes(notes) {
+            const data = await response.json();
             const tableBody = document.getElementById('care-notes-body');
-            tableBody.innerHTML = '';
             
-            notes.forEach(note => {
-                const row = createNoteRow(note);
+            // Add new rows to the table
+            data.notes.forEach(note => {
+                const row = document.createElement('tr');
+                
+                // Date column
+                const dateCell = document.createElement('td');
+                dateCell.textContent = note.date;
+                row.appendChild(dateCell);
+                
+                // Staff column
+                const staffCell = document.createElement('td');
+                staffCell.textContent = note.staff;
+                row.appendChild(staffCell);
+                
+                // Note column
+                const noteCell = document.createElement('td');
+                noteCell.textContent = note.note;
+                row.appendChild(noteCell);
+                
+                // Add to table
                 tableBody.appendChild(row);
             });
-        }
-        
-        function loadRemainingNotes(allNotes, startIndex) {
-            const tableBody = document.getElementById('care-notes-body');
-            const totalNotes = allNotes.length;
             
-            // Process notes in batches to keep the UI responsive
-            const processBatch = (index) => {
-                const endIndex = Math.min(index + 20, totalNotes);
-                
-                for (let i = index; i < endIndex; i++) {
-                    const row = createNoteRow(allNotes[i]);
-                    tableBody.appendChild(row);
-                }
-                
-                if (endIndex < totalNotes) {
-                    // Schedule next batch using requestAnimationFrame
-                    requestAnimationFrame(() => processBatch(endIndex));
-                }
-            };
+            // Update offset for next load
+            currentOffset += data.notes.length;
             
-            processBatch(startIndex);
-        }
-        
-        function createNoteRow(note) {
-            const row = document.createElement('tr');
-            
-            // Date column - handle both formats (timestamp or date)
-            const dateCell = document.createElement('td');
-            if (note.timestamp) {
-                dateCell.textContent = note.timestamp;
-            } else if (note.date) {
-                dateCell.textContent = note.date;
+            // Hide button if no more notes
+            if (!data.has_more) {
+                loadMoreBtn.style.display = 'none';
             }
             
-            // Add "NEW" badge if needed
-            if (note.is_new) {
-                const badge = document.createElement('span');
-                badge.style.background = '#d1fae5';
-                badge.style.color = '#047857';
-                badge.style.padding = '0.2rem 0.5rem';
-                badge.style.borderRadius = '4px';
-                badge.style.fontSize = '0.75rem';
-                badge.textContent = 'NEW';
-                dateCell.appendChild(document.createTextNode(' '));
-                dateCell.appendChild(badge);
-            }
-            
-            // Staff column
-            const staffCell = document.createElement('td');
-            staffCell.textContent = note.staff || 'N/A';
-            
-            // Note column
-            const noteCell = document.createElement('td');
-            // Handle notes with newlines by preserving formatting
-            if (note.note && note.note.includes('\n')) {
-                noteCell.innerHTML = note.note.replace(/\n/g, '<br>');
-                noteCell.style.whiteSpace = 'pre-wrap';
-            } else {
-                noteCell.textContent = note.note || '';
-            }
-            
-            // Add to row
-            row.appendChild(dateCell);
-            row.appendChild(staffCell);
-            row.appendChild(noteCell);
-            
-            return row;
+        } catch (error) {
+            console.error('Error loading more notes:', error);
+        } finally {
+            loadingIndicator.style.display = 'none';
+            loadMoreBtn.disabled = false;
         }
-        
-        // Keep existing search function
-        function searchCareNotes() {
-            const searchTerm = document.getElementById('care-notes-search').value.toLowerCase();
-            const table = document.getElementById('care-notes-table');
-            const rows = table.getElementsByTagName('tr');
+    }
+    
+    // Existing functions
+    function searchCareNotes() {
+        const searchTerm = document.getElementById('care-notes-search').value.toLowerCase();
+        const table = document.getElementById('care-notes-table');
+        const rows = table.getElementsByTagName('tr');
 
-            // Start from 1 to skip header row
-            for (let i = 1; i < rows.length; i++) {
-                const row = rows[i];
-                const cells = row.getElementsByTagName('td');
-                let foundMatch = false;
+        // Start from 1 to skip header row
+        for (let i = 1; i < rows.length; i++) {
+            const row = rows[i];
+            const cells = row.getElementsByTagName('td');
+            let foundMatch = false;
 
-                // Remove existing highlights
-                row.innerHTML = row.innerHTML.replace(/<mark class="highlight">/g, '').replace(/<\/mark>/g, '');
+            // Remove existing highlights
+            row.innerHTML = row.innerHTML.replace(/<mark class="highlight">/g, '').replace(/<\/mark>/g, '');
 
-                // Search through all cells in the row
-                for (let cell of cells) {
-                    const text = cell.textContent;
-                    if (text.toLowerCase().includes(searchTerm)) {
-                        foundMatch = true;
-                        if (searchTerm) {
-                            // Create a regex that matches the search term (case insensitive)
-                            const regex = new RegExp(`(${searchTerm})`, 'gi');
-                            // Replace matches with highlighted version
-                            cell.innerHTML = text.replace(regex, '<mark class="highlight">$1</mark>');
-                        }
+            // Search through all cells in the row
+            for (let cell of cells) {
+                const text = cell.textContent;
+                if (text.toLowerCase().includes(searchTerm)) {
+                    foundMatch = true;
+                    if (searchTerm) {
+                        // Create a regex that matches the search term (case insensitive)
+                        const regex = new RegExp(`(${searchTerm})`, 'gi');
+                        // Replace matches with highlighted version
+                        cell.innerHTML = text.replace(regex, '<mark class="highlight">$1</mark>');
                     }
                 }
-
-                // Show/hide row based on search
-                row.style.display = foundMatch || searchTerm === '' ? '' : 'none';
             }
-        }
 
-        function showAddNoteModal() {
-            document.getElementById('add-note-modal').classList.add('is-active');
-            // Focus the textarea after modal is shown
-            setTimeout(() => {
-                document.getElementById('note-text').focus();
-            }, 100);
+            // Show/hide row based on search
+            row.style.display = foundMatch || searchTerm === '' ? '' : 'none';
         }
+    }
 
-        function closeAddNoteModal() {
-            document.getElementById('add-note-modal').classList.remove('is-active');
-            document.getElementById('note-text').value = '';
+    function showAddNoteModal() {
+        document.getElementById('add-note-modal').classList.add('is-active');
+        // Focus the textarea after modal is shown
+        setTimeout(() => {
+            document.getElementById('note-text').focus();
+        }, 100);
+    }
+
+    function closeAddNoteModal() {
+        document.getElementById('add-note-modal').classList.remove('is-active');
+        document.getElementById('note-text').value = '';
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        // Display first 20 notes immediately for quick initial render
+        const allNotes = {{ care_notes|tojson }};
+        displayInitialNotes(allNotes.slice(0, 20));
+        
+        // Load the rest of the notes after a slight delay using animation frames
+        setTimeout(() => {
+            requestAnimationFrame(() => loadRemainingNotes(allNotes, 20));
+        }, 100);
+    });
+    
+    function displayInitialNotes(notes) {
+        const tableBody = document.getElementById('care-notes-body');
+        tableBody.innerHTML = '';
+        
+        notes.forEach(note => {
+            const row = createNoteRow(note);
+            tableBody.appendChild(row);
+        });
+    }
+    
+    function loadRemainingNotes(allNotes, startIndex) {
+        const tableBody = document.getElementById('care-notes-body');
+        const totalNotes = allNotes.length;
+        
+        // Process notes in batches to keep the UI responsive
+        const processBatch = (index) => {
+            const endIndex = Math.min(index + 20, totalNotes);
+            
+            for (let i = index; i < endIndex; i++) {
+                const row = createNoteRow(allNotes[i]);
+                tableBody.appendChild(row);
+            }
+            
+            if (endIndex < totalNotes) {
+                // Schedule next batch using requestAnimationFrame
+                requestAnimationFrame(() => processBatch(endIndex));
+            }
+        };
+        
+        processBatch(startIndex);
+    }
+    
+    function createNoteRow(note) {
+        const row = document.createElement('tr');
+        
+        // Date column - handle both formats (timestamp or date)
+        const dateCell = document.createElement('td');
+        if (note.timestamp) {
+            dateCell.textContent = note.timestamp;
+        } else if (note.date) {
+            dateCell.textContent = note.date;
         }
-    </script>
-</body>
-</html>
+        
+        // Add "NEW" badge if needed
+        if (note.is_new) {
+            const badge = document.createElement('span');
+            badge.style.background = '#d1fae5';
+            badge.style.color = '#047857';
+            badge.style.padding = '0.2rem 0.5rem';
+            badge.style.borderRadius = '4px';
+            badge.style.fontSize = '0.75rem';
+            badge.textContent = 'NEW';
+            dateCell.appendChild(document.createTextNode(' '));
+            dateCell.appendChild(badge);
+        }
+        
+        // Staff column
+        const staffCell = document.createElement('td');
+        staffCell.textContent = note.staff || 'N/A';
+        
+        // Note column
+        const noteCell = document.createElement('td');
+        // Handle notes with newlines by preserving formatting
+        if (note.note && note.note.includes('\n')) {
+            noteCell.innerHTML = note.note.replace(/\n/g, '<br>');
+            noteCell.style.whiteSpace = 'pre-wrap';
+        } else {
+            noteCell.textContent = note.note || '';
+        }
+        
+        // Add to row
+        row.appendChild(dateCell);
+        row.appendChild(staffCell);
+        row.appendChild(noteCell);
+        
+        return row;
+    }
+</script>
+{% endblock %}

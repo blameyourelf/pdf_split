@@ -290,49 +290,15 @@
     </script>
 </head>
 <body>
-    <nav class="navbar">
-        <div class="navbar-content">
-            <div class="username">
-                <i class="fas fa-user"></i>
-                Welcome, {{ current_user.username }}
-            </div>
-            <div class="user-nav">
-                <a href="{{ url_for('my_shift_notes') }}" class="button is-info is-light mr-2">
-                    <span class="icon">
-                        <i class="fas fa-clipboard-list"></i>
-                    </span>
-                    <span>View My Shift Notes</span>
-                </a>
-                <a href="{{ url_for('profile') }}" class="button is-light mr-2">
-                    <span class="icon">
-                        <i class="fas fa-hospital"></i>
-                    </span>
-                    <span>Choose Default Ward</span>
-                </a>
-                {% if current_user.role == 'admin' %}
-                <a href="{{ url_for('view_audit_log') }}" class="audit-link">
-                    <i class="fas fa-history"></i>
-                    View Audit Log
-                </a>
-                <a href="{{ url_for('admin_notes') }}" class="button is-primary is-light ml-2">
-                    <span class="icon">
-                        <i class="fas fa-clipboard-check"></i>
-                    </span>
-                    <span>Notes Dashboard</span>
-                </a>
-                {% endif %}
-                <a href="{{ url_for('logout') }}" class="logout-button">
-                    <i class="fas fa-sign-out-alt"></i>
-                    Logout
-                </a>
-            </div>
-        </div>
-    </nav>
+    {% extends "base.html" %}
 
+    {% block title %}Contingency EPR Digital Notes Viewer{% endblock %}
+
+    {% block content %}
     <div class="container">
         <h1 class="title">Contingency EPR Digital Notes Viewer</h1>
         <p class="subtitle">Select a Ward to View Patient Records</p>
-        
+
         <div class="recent-patients">
             <button type="button" class="recent-patients-button" onclick="toggleRecentPatients()">
                 <i class="fas fa-history"></i>
@@ -360,7 +326,7 @@
                 </div>
             </form>
         </div>
-        
+
         {% if current_user.default_ward and not show_all %}
         <div class="has-text-centered mb-4">
             <a href="/?show_all=1" class="button is-info is-light">
@@ -388,5 +354,6 @@
             {% endfor %}
         </div>
     </div>
+    {% endblock %}
 </body>
 </html>

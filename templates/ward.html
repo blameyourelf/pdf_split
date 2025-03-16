@@ -1,325 +1,208 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ward {{ ward_num }} - Patient Records</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.min.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.9.3/css/bulma.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-        body {
-            padding: 20px;
-            font-family: 'Inter', sans-serif;
-            background-color: #f8fafc;
-            min-height: 100vh;
-        }
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 2rem;
-        }
-        .title {
-            color: #1a365d;
-            font-weight: 700;
-            font-size: 2.5rem;
-            margin-bottom: 1rem;
-        }
-        .subtitle {
-            color: #4a5568;
-            margin-bottom: 2rem;
-            font-size: 1.1rem;
-        }
-        .search-box {
-            margin-bottom: 2rem;
-            background: white;
-            padding: 1.5rem;
-            border-radius: 12px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
-        }
-        .ward-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 2rem;
-        }
-        .back-button {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            background-color: #4299e1;
-            color: white;
-            padding: 0.75rem 1.5rem;
-            border-radius: 8px;
-            transition: all 0.3s ease;
-            font-weight: 500;
-            text-decoration: none;
-        }
-        .back-button:hover {
-            background-color: #3182ce;
-            transform: translateY(-1px);
-            color: white;
-        }
-        .patient-list {
-            list-style: none;
-            padding: 0;
-            display: grid;
-            gap: 1rem;
-        }
-        .patient-card {
-            background: white;
-            border-radius: 8px;
-            padding: 1rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-            transition: all 0.3s ease;
-            text-decoration: none;
-            color: #2d3748;
-        }
-        .patient-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            background-color: #ebf8ff;
-        }
-        .patient-info {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-        }
-        .patient-icon {
-            color: #4299e1;
-            font-size: 1.5rem;
-        }
-        .patient-details {
-            display: flex;
-            flex-direction: column;
-        }
-        .patient-id {
-            font-weight: 600;
-            color: #2d3748;
-        }
-        .patient-name {
-            color: #718096;
-            font-size: 0.9rem;
-        }
-        .navbar {
-            background: white;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-            padding: 1rem 2rem;
-            margin-bottom: 2rem;
-        }
-        .navbar-content {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-        .user-nav {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-        }
-        .username {
-            color: #4a5568;
-            font-weight: 500;
-        }
-        .audit-link {
-            color: #4299e1;
-            text-decoration: none;
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-        .audit-link:hover {
-            color: #3182ce;
-        }
-        .logout-button {
-            background-color: #fff5f5;
-            color: #c53030;
-            border: none;
-            padding: 0.5rem 1rem;
-            border-radius: 8px;
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            cursor: pointer;
-            text-decoration: none;
-            transition: all 0.3s ease;
-        }
-        .logout-button:hover {
-            background-color: #fed7d7;
-            color: #c53030;
-        }
-        .loading {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 2rem;
-        }
-        .loading-spinner {
-            animation: spin 1s linear infinite;
-            font-size: 2rem;
-            color: #4299e1;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-    </style>
-    <script>
-        async function searchPatients() {
-            const query = document.getElementById('search').value;
-            const loadingEl = document.getElementById('loading-indicator');
-            const patientList = document.getElementById('patient-list');
-            
-            try {
-                // Show loading indicator
-                loadingEl.style.display = 'flex';
-                patientList.style.display = 'none';
-                
-                const response = await fetch(`/search/{{ ward_num }}?q=${encodeURIComponent(query)}`);
-                if (!response.ok) {
-                    throw new Error('Search failed');
-                }
-                const results = await response.json();
-                displayPatients(results);
-            } catch (error) {
-                console.error('Error during search:', error);
-            } finally {
-                // Hide loading indicator
-                loadingEl.style.display = 'none';
-                patientList.style.display = 'grid';
-            }
-        }
+{% extends "base.html" %}
 
-        function displayPatients(patients) {
-            const list = document.getElementById('patient-list');
-            list.innerHTML = '';
-            
-            if (patients.length === 0) {
-                list.innerHTML = '<li>No patients found</li>';
-                return;
-            }
+{% block title %}Ward {{ ward_num }} - Patient Records{% endblock %}
 
-            patients.forEach(result => {
-                const li = document.createElement('li');
-                li.innerHTML = `
-                    <a href="/patient/${result.id}" class="patient-card">
-                        <div class="patient-info">
-                            <span class="patient-icon">
-                                <i class="fas fa-user"></i>
-                            </span>
-                            <div class="patient-details">
-                                <span class="patient-id">${result.id}</span>
-                                <span class="patient-name">${result.name}</span>
-                            </div>
-                        </div>
-                        <i class="fas fa-chevron-right"></i>
-                    </a>
-                `;
-                list.appendChild(li);
-            });
-        }
+{% block extra_styles %}
+<style>
+    .patient-list {
+        list-style: none;
+        padding: 0;
+        display: grid;
+        gap: 1rem;
+    }
+    .patient-card {
+        background: white;
+        border-radius: 8px;
+        padding: 1rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        transition: all 0.3s ease;
+        text-decoration: none;
+        color: #2d3748;
+        width: 100%;
+    }
+    .patient-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        background-color: #ebf8ff;
+    }
+    .patient-info {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+    .patient-icon {
+        color: #4299e1;
+        font-size: 1.5rem;
+    }
+    .patient-details {
+        display: flex;
+        flex-direction: column;
+    }
+    .patient-id {
+        font-weight: 600;
+        color: #2d3748;
+    }
+    .patient-name {
+        color: #718096;
+        font-size: 0.9rem;
+    }
+    .ward-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 2rem;
+    }
+    .search-box {
+        margin-bottom: 2rem;
+        background: white;
+        padding: 1.5rem;
+        border-radius: 12px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+    }
+    .loading {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: 2rem;
+    }
+    .loading-spinner {
+        animation: spin 1s linear infinite;
+        font-size: 2rem;
+        color: #4299e1;
+    }
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+</style>
+{% endblock %}
 
-        // Load patients immediately when page loads
-        window.addEventListener('load', searchPatients);
-    </script>
-</head>
-<body>
-    <nav class="navbar">
-        <div class="navbar-content">
-            <div class="username">
-                <i class="fas fa-user"></i>
-                Welcome, {{ current_user.username }}
-            </div>
-            <div class="user-nav">
-                <a href="{{ url_for('my_shift_notes') }}" class="button is-info is-light mr-2">
-                    <span class="icon">
-                        <i class="fas fa-clipboard-list"></i>
-                    </span>
-                    <span>View My Shift Notes</span>
-                </a>
-                {% if current_user.role == 'admin' %}
-                <a href="{{ url_for('view_audit_log') }}" class="audit-link">
-                    <i class="fas fa-history"></i>
-                    View Audit Log
-                </a>
+{% block context_actions %}
+<a href="/?show_all=1" class="button is-info is-light">
+    <span class="icon">
+        <i class="fas fa-th-large"></i>
+    </span>
+    <span>All Wards</span>
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="ward-header">
+        <div>
+            <h1 class="title">
+                {% if ward_num.isdigit() %}
+                    Ward {{ ward_num }}
+                {% else %}
+                    {{ ward_num }}
                 {% endif %}
-                <a href="{{ url_for('logout') }}" class="logout-button">
-                    <i class="fas fa-sign-out-alt"></i>
-                    Logout
-                </a>
-            </div>
+            </h1>
+            <p class="subtitle">{{ pdf_filename }}</p>
+            <p class="subtitle" style="font-size: 0.9rem; color: #718096;">
+                Snapshot taken at: {{ pdf_creation_time }}
+            </p>
         </div>
-    </nav>
-
-    <div class="container">
-        <h1 class="title has-text-centered" style="font-size: 1.75rem; margin-bottom: 2.5rem;">
-            Contingency EPR Digital Notes Viewer
-        </h1>
-
-        <div class="ward-header">
-            <div>
-                <h1 class="title">
-                    {% if ward_num.isdigit() %}
-                        Ward {{ ward_num }}
-                    {% else %}
-                        {{ ward_num }}
-                    {% endif %}
-                </h1>
-                <p class="subtitle">{{ pdf_filename }}</p>
-                <p class="subtitle" style="font-size: 0.9rem; color: #718096;">
-                    Snapshot taken at: {{ pdf_creation_time }}
-                </p>
-            </div>
-            <a href="/?show_all=1" class="back-button">
-                <i class="fas fa-th-large"></i>
-                Show All Wards
-            </a>
-        </div>
-
-        <div class="search-box">
-            <form onsubmit="event.preventDefault(); searchPatients();">
-                <div class="field">
-                    <div class="control has-icons-left">
-                        <input class="input is-medium" type="text" id="search" 
-                               placeholder="Search by Patient ID" 
-                               oninput="searchPatients()">
-                        <span class="icon is-left">
-                            <i class="fas fa-search"></i>
-                        </span>
-                    </div>
-                </div>
-            </form>
-        </div>
-        
-        <!-- Loading indicator -->
-        <div id="loading-indicator" class="loading" style="display: none;">
-            <i class="fas fa-spinner loading-spinner"></i>
-        </div>
-        
-        <ul class="patient-list" id="patient-list">
-            {% for patient_id, patient_info in ward_data.patients.items() %}
-                <li>
-                    <a href="/patient/{{ patient_id }}" class="patient-card">
-                        <div class="patient-info">
-                            <span class="patient-icon">
-                                <i class="fas fa-user"></i>
-                            </span>
-                            <div class="patient-details">
-                                <span class="patient-id">{{ patient_id }}</span>
-                                <span class="patient-name">{{ patient_info.name }}</span>
-                            </div>
-                        </div>
-                        <i class="fas fa-chevron-right"></i>
-                    </a>
-                </li>
-            {% endfor %}
-        </ul>
     </div>
-</body>
-</html>
+
+    <div class="search-box">
+        <form onsubmit="event.preventDefault(); searchPatients();">
+            <div class="field">
+                <div class="control has-icons-left">
+                    <input class="input is-medium" type="text" id="search" 
+                           placeholder="Search by Patient ID" 
+                           oninput="searchPatients()">
+                    <span class="icon is-left">
+                        <i class="fas fa-search"></i>
+                    </span>
+                </div>
+            </div>
+        </form>
+    </div>
+    
+    <!-- Loading indicator -->
+    <div id="loading-indicator" class="loading" style="display: none;">
+        <i class="fas fa-spinner loading-spinner"></i>
+    </div>
+    
+    <ul class="patient-list" id="patient-list">
+        {% for patient_id, patient_info in ward_data.patients.items() %}
+            <li>
+                <a href="/patient/{{ patient_id }}" class="patient-card">
+                    <div class="patient-info">
+                        <span class="patient-icon">
+                            <i class="fas fa-user"></i>
+                        </span>
+                        <div class="patient-details">
+                            <span class="patient-id">{{ patient_id }}</span>
+                            <span class="patient-name">{{ patient_info.name }}</span>
+                        </div>
+                    </div>
+                    <i class="fas fa-chevron-right"></i>
+                </a>
+            </li>
+        {% endfor %}
+    </ul>
+</div>
+
+<script>
+    async function searchPatients() {
+        const query = document.getElementById('search').value;
+        const loadingEl = document.getElementById('loading-indicator');
+        const patientList = document.getElementById('patient-list');
+        
+        try {
+            // Show loading indicator
+            loadingEl.style.display = 'flex';
+            patientList.style.display = 'none';
+            
+            const response = await fetch(`/search/{{ ward_num }}?q=${encodeURIComponent(query)}`);
+            if (!response.ok) {
+                throw new Error('Search failed');
+            }
+            const results = await response.json();
+            displayPatients(results);
+        } catch (error) {
+            console.error('Error during search:', error);
+        } finally {
+            // Hide loading indicator
+            loadingEl.style.display = 'none';
+            patientList.style.display = 'grid';
+        }
+    }
+
+    function displayPatients(patients) {
+        const list = document.getElementById('patient-list');
+        list.innerHTML = '';
+        
+        if (patients.length === 0) {
+            list.innerHTML = '<li>No patients found</li>';
+            return;
+        }
+
+        patients.forEach(result => {
+            const li = document.createElement('li');
+            li.innerHTML = `
+                <a href="/patient/${result.id}" class="patient-card">
+                    <div class="patient-info">
+                        <span class="patient-icon">
+                            <i class="fas fa-user"></i>
+                        </span>
+                        <div class="patient-details">
+                            <span class="patient-id">${result.id}</span>
+                            <span class="patient-name">${result.name}</span>
+                        </div>
+                    </div>
+                    <i class="fas fa-chevron-right"></i>
+                </a>
+            `;
+            list.appendChild(li);
+        });
+    }
+
+    // Load patients immediately when page loads
+    window.addEventListener('load', searchPatients);
+</script>
+{% endblock %}
