@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Contingency Trak Digital Notes Viewer</title>
+    <title>Contingency EPR Digital Notes Viewer</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.9.3/css/bulma.min.css">
@@ -314,6 +314,12 @@
                     <i class="fas fa-history"></i>
                     View Audit Log
                 </a>
+                <a href="{{ url_for('admin_notes') }}" class="button is-primary is-light ml-2">
+                    <span class="icon">
+                        <i class="fas fa-clipboard-check"></i>
+                    </span>
+                    <span>Notes Dashboard</span>
+                </a>
                 {% endif %}
                 <a href="{{ url_for('logout') }}" class="logout-button">
                     <i class="fas fa-sign-out-alt"></i>
@@ -324,7 +330,7 @@
     </nav>
 
     <div class="container">
-        <h1 class="title">Contingency Trak Digital Notes Viewer</h1>
+        <h1 class="title">Contingency EPR Digital Notes Viewer</h1>
         <p class="subtitle">Select a Ward to View Patient Records</p>
         
         <div class="recent-patients">
