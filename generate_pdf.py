@@ -210,7 +210,7 @@ if __name__ == "__main__":
         "Willow",
         "Sunflower",
         "Rose",
-        "A&E",  # Emergency Department
+        "ED",  # Emergency Department
         "Maternity",
         "Pediatrics"
     ]
