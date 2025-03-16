@@ -150,6 +150,12 @@ class Settings(db.Model):
 def get_notes_enabled():
     return Settings.get_setting('notes_enabled', 'true') == 'true'
 
+def get_timeout_enabled():
+    return Settings.get_setting('timeout_enabled', 'true') == 'true'
+
+def get_timeout_minutes():
+    return int(Settings.get_setting('timeout_minutes', '10'))
+
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
@@ -1102,7 +1108,9 @@ def admin_notes():
                           prev_page=paginated_notes.prev_num or page,
                           next_page=paginated_notes.next_num or page,
                           excel_export_available=EXCEL_EXPORT_AVAILABLE,
-                          notes_enabled=get_notes_enabled())
+                          notes_enabled=get_notes_enabled(),
+                          timeout_enabled=get_timeout_enabled(),
+                          timeout_minutes=get_timeout_minutes())
 
 @app.route('/admin/notes/export/<format>')
 @login_required
@@ -1316,15 +1324,6 @@ def export_pdf(data):
         flash(f"PDF export failed: {str(e)}", "error")
         return redirect(url_for('admin_notes'))
 
-@click.command('init-db')
-@with_appcontext
-def init_db_command():
-    """Initialize the database (creates tables if missing)."""
-    db.create_all()
-    click.echo('Database initialized.')
-
-app.cli.add_command(init_db_command)
-
 @app.before_request
 def store_referrer():
     # Store referrer for better navigation
@@ -1333,6 +1332,55 @@ def store_referrer():
         excluded_endpoints = ['logout', 'login', 'serve_static']
         if request.endpoint not in excluded_endpoints:
             session['last_page'] = request.url
+
+@app.before_request
+def check_session_timeout():
+    if current_user.is_authenticated and request.endpoint not in ['static', 'logout']:
+        if get_timeout_enabled():
+            last_active = session.get('last_active', None)
+            timeout_minutes = get_timeout_minutes()
+            
+            if last_active is not None:
+                last_active = datetime.fromtimestamp(last_active)
+                if datetime.utcnow() - last_active > timedelta(minutes=timeout_minutes):
+                    logout_user()
+                    flash('Your session has expired due to inactivity')
+                    return redirect(url_for('login'))
+            
+            session['last_active'] = datetime.utcnow().timestamp()
+
+@app.route('/admin/timeout_settings', methods=['POST'])
+@login_required
+def update_timeout_settings():
+    if current_user.role != 'admin':
+        flash('Access denied')
+        return redirect(url_for('index'))
+    
+    enabled = request.form.get('timeout_enabled') == '1'
+    minutes = request.form.get('timeout_minutes', '10')
+    
+    try:
+        minutes = int(minutes)
+        if minutes < 1:
+            raise ValueError("Timeout must be at least 1 minute")
+    except ValueError:
+        flash('Invalid timeout value', 'error')
+        return redirect(url_for('admin_notes'))
+    
+    Settings.set_setting('timeout_enabled', str(enabled).lower())
+    Settings.set_setting('timeout_minutes', str(minutes))
+    
+    flash('Session timeout settings updated successfully', 'success')
+    return redirect(url_for('admin_notes'))
+
+@click.command('init-db')
+@with_appcontext
+def init_db_command():
+    """Initialize the database (creates tables if missing)."""
+    db.create_all()
+    click.echo('Database initialized.')
+
+app.cli.add_command(init_db_command)
 
 if __name__ == '__main__':
     with app.app_context():

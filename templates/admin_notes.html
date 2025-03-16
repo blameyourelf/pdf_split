@@ -85,6 +85,13 @@
             </div>
             <div class="column is-narrow">
                 <div class="buttons">
+                    <!-- Add timeout settings modal trigger -->
+                    <button class="button is-info is-light" onclick="showTimeoutModal()">
+                        <span class="icon">
+                            <i class="fas fa-clock"></i>
+                        </span>
+                        <span>Session Timeout</span>
+                    </button>
                     <form method="POST" action="{{ url_for('toggle_notes') }}">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <button type="submit" class="button {% if notes_enabled %}is-danger{% else %}is-success{% endif %} is-light">
@@ -103,6 +110,54 @@
                 </div>
             </div>
         </div>
+        
+        <!-- Add timeout settings modal -->
+        <div class="modal" id="timeout-modal">
+            <div class="modal-background"></div>
+            <div class="modal-card">
+                <header class="modal-card-head">
+                    <p class="modal-card-title">Session Timeout Settings</p>
+                    <button class="delete" aria-label="close" onclick="closeTimeoutModal()"></button>
+                </header>
+                <section class="modal-card-body">
+                    <form id="timeout-form" method="POST" action="{{ url_for('update_timeout_settings') }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="field">
+                            <label class="label">Enable Session Timeout</label>
+                            <div class="control">
+                                <label class="checkbox">
+                                    <input type="checkbox" name="timeout_enabled" value="1" 
+                                           {% if timeout_enabled %}checked{% endif %}>
+                                    Automatically log out inactive users
+                                </label>
+                            </div>
+                        </div>
+                        <div class="field">
+                            <label class="label">Timeout Duration (minutes)</label>
+                            <div class="control">
+                                <input class="input" type="number" name="timeout_minutes" 
+                                       value="{{ timeout_minutes }}" min="1">
+                            </div>
+                            <p class="help">Users will be logged out after this many minutes of inactivity</p>
+                        </div>
+                    </form>
+                </section>
+                <footer class="modal-card-foot">
+                    <button class="button is-primary" onclick="document.getElementById('timeout-form').submit()">Save Settings</button>
+                    <button class="button" onclick="closeTimeoutModal()">Cancel</button>
+                </footer>
+            </div>
+        </div>
+
+        <script>
+            function showTimeoutModal() {
+                document.getElementById('timeout-modal').classList.add('is-active');
+            }
+
+            function closeTimeoutModal() {
+                document.getElementById('timeout-modal').classList.remove('is-active');
+            }
+        </script>
 
         <h1 class="title">Admin Notes Dashboard</h1>
         <p class="subtitle">View and manage all notes in the system</p>
