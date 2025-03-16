@@ -113,6 +113,7 @@ class CareNote(db.Model):
     note = db.Column(db.Text, nullable=False)
     timestamp = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     ward_id = db.Column(db.String(50), nullable=True)
+    patient_name = db.Column(db.String(100), nullable=True)  # Add patient name column
 
     def to_dict(self):
         return {
@@ -121,7 +122,8 @@ class CareNote(db.Model):
             'note': self.note,
             'timestamp': self.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
             'user_id': self.user_id,
-            'ward_id': self.ward_id
+            'ward_id': self.ward_id,
+            'patient_name': self.patient_name
         }
 
 @login_manager.user_loader
@@ -414,6 +416,116 @@ def init_ward_data():
 # Initialize with metadata
 init_ward_data()
 
+# Add this function to properly load ward patients data
+def load_ward_patients(ward_num):
+    """Load patient data for a specific ward."""
+    global wards_data
+    if ward_num in wards_data:
+        # Only load if not already loaded
+        if not wards_data[ward_num].get("patients") or len(wards_data[ward_num]["patients"]) == 0:
+            pdf_filename = wards_data[ward_num].get("filename")
+            if pdf_filename and os.path.exists(pdf_filename):
+                try:
+                    # Clear cache to ensure fresh data
+                    process_ward_pdf.cache_clear()
+                    patient_data = process_ward_pdf(pdf_filename)
+                    wards_data[ward_num]["patients"] = patient_data
+                    return True
+                except Exception as e:
+                    print(f"Error loading patients for ward {ward_num}: {str(e)}")
+                    return False
+        return True  # Already loaded
+    return False  # Ward not found
+
+# Update load_specific_ward to use the new function
+def load_specific_ward(ward_num):
+    """Load a specific ward's data (wrapper around load_ward_patients)"""
+    return load_ward_patients(ward_num)
+
+# Replace the load_ward_patients function with a more efficient version
+def load_ward_patients(ward_num):
+    """Load patient data for a specific ward, but only if needed."""
+    global wards_data
+    if ward_num in wards_data:
+        # Only load if patients aren't already loaded
+        if not wards_data[ward_num].get("patients") or len(wards_data[ward_num]["patients"]) == 0:
+            pdf_filename = wards_data[ward_num].get("filename")
+            if pdf_filename and os.path.exists(pdf_filename):
+                try:
+                    process_ward_pdf.cache_clear()
+                    patient_data = process_ward_pdf(pdf_filename)
+                    wards_data[ward_num]["patients"] = patient_data
+                    return True
+                except Exception as e:
+                    print(f"Error loading patients for ward {ward_num}: {str(e)}")
+                    return False
+        return True  # Already loaded
+    return False  # Ward not found
+
+# Add a new function to get patient information efficiently
+def get_patient_info_from_ward_data(patient_id, ward_id=None):
+    """
+    Get patient name and ward name from ward data efficiently.
+    Returns tuple of (patient_name, ward_name, ward_id)
+    """
+    # If we know the ward, check it directly first
+    if ward_id and ward_id in wards_data:
+        if not wards_data[ward_id].get("patients"):
+            load_ward_patients(ward_id)
+        
+        ward_info = wards_data[ward_id]
+        patients = ward_info.get("patients", {})
+        if patient_id in patients:
+            return (
+                patients[patient_id].get("name", "Unknown"),
+                ward_info.get("display_name", ward_id),
+                ward_id
+            )
+    
+    # Try to find patient in frequently used wards first
+    # This optimizes for common wards to avoid loading all wards
+    frequently_used_wards = []
+    
+    # Get recently viewed wards by this user
+    recent_views = RecentlyViewedPatient.query.filter_by(user_id=current_user.id).all()
+    for rv in recent_views:
+        if rv.ward_num and rv.ward_num not in frequently_used_wards:
+            frequently_used_wards.append(rv.ward_num)
+    
+    # Check frequent wards first
+    for ward_num in frequently_used_wards:
+        if ward_num in wards_data:
+            if not wards_data[ward_num].get("patients"):
+                load_ward_patients(ward_num)
+            
+            ward_info = wards_data[ward_num]
+            patients = ward_info.get("patients", {})
+            if patient_id in patients:
+                return (
+                    patients[patient_id].get("name", "Unknown"),
+                    ward_info.get("display_name", ward_num),
+                    ward_num
+                )
+    
+    # If not found in frequent wards, check remaining wards as needed
+    for ward_num, ward_info in wards_data.items():
+        if ward_num in frequently_used_wards:
+            continue  # Skip already checked wards
+            
+        if not ward_info.get("patients"):
+            load_ward_patients(ward_num)
+        
+        patients = ward_info.get("patients", {})
+        if patient_id in patients:
+            return (
+                patients[patient_id].get("name", "Unknown"),
+                ward_info.get("display_name", ward_num),
+                ward_num
+            )
+    
+    # Not found in any ward
+    return ("Unknown", "Unknown", None)
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
@@ -466,18 +578,21 @@ def index():
 @app.route('/profile', methods=['GET', 'POST'])
 @login_required
 def profile():
+    # Remove any note-related flash messages that might have persisted
+    session.pop('_flashes', None)
+    
     if request.method == 'POST':
         default_ward = request.form.get('default_ward')
-        # Update user's default ward
-        current_user.default_ward = default_ward
+        user = User.query.get(current_user.id)
+        user.default_ward = default_ward
         db.session.commit()
-        flash('Profile updated successfully!', 'success')
+        flash('Default ward updated successfully', 'success')
         return redirect(url_for('profile'))
-    # Sort wards alphabetically by display_name for the dropdown
-    sorted_wards = {}
-    for ward_id, info in sorted(wards_data.items(), key=lambda x: x[1]['display_name'].lower()):
-        sorted_wards[ward_id] = info
-    return render_template('profile.html', wards=sorted_wards, current_ward=current_user.default_ward)
+
+    wards = get_ward_metadata()
+    return render_template('profile.html', 
+                         wards=wards,
+                         current_ward=current_user.default_ward)
     
 @app.route('/ward/<ward_num>')
 @login_required
@@ -730,39 +845,35 @@ def add_care_note(patient_id):
         note_text = request.form.get('note')
         if not note_text:
             return jsonify({'error': 'Note text is required'}), 400
-        # Find which ward this patient belongs to
+            
+        # Find which ward this patient belongs to and get patient name
         ward_id = None
+        patient_name = "Unknown"
+        
         for ward_num, ward_info in wards_data.items():
             if ward_info.get("patients") and patient_id in ward_info.get("patients", {}):
                 ward_id = ward_num
+                patient_name = ward_info["patients"][patient_id].get("name", "Unknown")
                 break
         
         note = CareNote(
             patient_id=patient_id,
             user_id=current_user.id,
             note=note_text,
-            ward_id=ward_id  # Save the ward_id
+            ward_id=ward_id,
+            patient_name=patient_name  # Save patient name
         )
         
         # Add and save the care note
         db.session.add(note)
         db.session.commit()
-        
-        # Add audit log entry
-        audit_log = AuditLog(
-            user_id=current_user.id,
-            username=current_user.username,  
-            action='add_note',
-            patient_id=patient_id
-        )
-        db.session.add(audit_log)
-        db.session.commit()
-        
+        flash('Note added successfully!', 'note-success')
         # Use session-based flash instead of regular flash
         session['care_note_success'] = 'Note added successfully!'
         return redirect(url_for('patient', patient_id=patient_id))
     except Exception as e:
         db.session.rollback()
+        flash('Error adding note: ' + str(e), 'note-error')
         return jsonify({'error': str(e)}), 500
 
 @app.route('/my_shift_notes')
@@ -776,33 +887,28 @@ def my_shift_notes():
         .order_by(CareNote.timestamp.desc())\
         .all()
     
-    # Get patient names for the notes
+    # Prepare notes with names - now using stored patient_name
     notes_with_names = []
+    
+    # Pre-load ward display names for efficiency
+    ward_display_names = {ward_id: info.get("display_name", ward_id) 
+                         for ward_id, info in wards_data.items()}
+    
     for note in notes:
-        patient_name = "Unknown"
+        # Get ward name from our preloaded display names
         ward_name = "Unknown"
+        if note.ward_id:
+            ward_name = ward_display_names.get(note.ward_id, note.ward_id)
         
-        # First try to get ward info from the note's ward_id if available
-        if note.ward_id and note.ward_id in wards_data:
-            ward_name = wards_data[note.ward_id].get("display_name", note.ward_id)
-            # Try to find patient in this ward
-            if wards_data[note.ward_id].get("patients") and note.patient_id in wards_data[note.ward_id].get("patients", {}):
-                patient_name = wards_data[note.ward_id]["patients"][note.patient_id].get("name", "Unknown")
-        
-        # If ward_id is not available or patient wasn't found, search through all wards
-        if patient_name == "Unknown" or ward_name == "Unknown":
-            for ward_num, ward_info in wards_data.items():
-                if ward_info.get("patients") and note.patient_id in ward_info.get("patients", {}):
-                    patient_name = ward_info["patients"][note.patient_id].get("name", "Unknown")
-                    ward_name = ward_info.get("display_name", ward_num)
-                    break
+        # Use stored patient_name
+        patient_name = note.patient_name or "Unknown"
         
         notes_with_names.append({
             **note.to_dict(),
             'patient_name': patient_name,
             'ward': ward_name
         })
-            
+    
     return render_template('shift_notes.html', notes=notes_with_names)
 
 @app.route('/admin/notes')
@@ -814,84 +920,92 @@ def admin_notes():
         return redirect(url_for('index'))
     
     # Get filter parameters
-    start_date_str = request.args.get('start_date', '')
-    end_date_str = request.args.get('end_date', '')
-    ward_id = request.args.get('ward_id', '')
-    user_id = request.args.get('user_id', '')
+    ward_id = request.args.get('ward')
+    username = request.args.get('username')
+    date_from = request.args.get('date_from')
+    date_to = request.args.get('date_to')
     page = request.args.get('page', 1, type=int)
-    per_page = 20
     
-    # Prepare filters dictionary to track what's applied
-    filters = {
-        'start_date': start_date_str,
-        'end_date': end_date_str,
-        'ward_id': ward_id,
-        'user_id': user_id,
-        'applied': False
-    }
+    # Check if this is a reset request
+    if request.args.get('reset') == '1':
+        return redirect(url_for('admin_notes'))
     
-    # Start with base query
+    # Build query with filters
     query = CareNote.query
     
-    # Apply date filters
-    if start_date_str:
-        filters['applied'] = True
-        start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
-        query = query.filter(CareNote.timestamp >= start_date)
+    # Track whether any filters are applied
+    filters_applied = False
     
-    if end_date_str:
-        filters['applied'] = True
-        end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
-        # Add one day to include the entire end date
-        end_date = end_date + timedelta(days=1)
-        query = query.filter(CareNote.timestamp <= end_date)
+    if username:
+        filters_applied = True
+        user_ids = [u.id for u in User.query.filter(User.username.like(f'%{username}%')).all()]
+        if user_ids:
+            query = query.filter(CareNote.user_id.in_(user_ids))
+        else:
+            # No matching users, return empty result
+            query = query.filter(CareNote.id < 0)
     
-    # Apply user filter
-    if user_id:
-        filters['applied'] = True
-        query = query.filter(CareNote.user_id == user_id)
+    if date_from:
+        filters_applied = True
+        try:
+            date_from_obj = datetime.strptime(date_from, '%Y-%m-%d')
+            query = query.filter(CareNote.timestamp >= date_from_obj)
+        except ValueError:
+            pass
+            
+    if date_to:
+        filters_applied = True
+        try:
+            date_to_obj = datetime.strptime(date_to, '%Y-%m-%d')
+            date_to_obj = date_to_obj.replace(hour=23, minute=59, second=59)
+            query = query.filter(CareNote.timestamp <= date_to_obj)
+        except ValueError:
+            pass
     
-    # Get total notes count for pagination
+    # Ward filtering using ward_id field
+    if ward_id:
+        filters_applied = True
+        query = query.filter(CareNote.ward_id == ward_id)
+    
+    # Count total matching notes before pagination
     total_notes = query.count()
     
-    # Paginate the results
-    paginated_notes = query.order_by(desc(CareNote.timestamp)).paginate(page=page, per_page=per_page)
+    # Paginate the query
+    paginated_notes = query.order_by(CareNote.timestamp.desc()).paginate(
+        page=page, per_page=50, error_out=False
+    )
     
+    # Get all user IDs from this page for batch processing
+    user_ids = list(set(note.user_id for note in paginated_notes.items))
+    # Get usernames in a single database query
+    users_map = {}
+    if user_ids:
+        users = User.query.filter(User.id.in_(user_ids)).all()
+        users_map = {user.id: user.username for user in users}
+    
+    # For ward info, we'll only load data for wards that appear in these notes
+    ward_ids = list(set(note.ward_id for note in paginated_notes.items if note.ward_id))
+    # Preload ward display names to avoid looking up repeatedly
+    ward_display_names = {}
+    for ward_id in ward_ids:
+        if ward_id in wards_data:
+            ward_display_names[ward_id] = wards_data[ward_id].get("display_name", ward_id)
+    
+    # Process notes with minimal database and ward data loading
     notes = []
     for note in paginated_notes.items:
-        # Get patient name and ward
-        patient_name = "Unknown"
+        # Get ward name efficiently using our preloaded display names
         ward_name = "Unknown"
-        patient_ward = None
+        if note.ward_id:
+            ward_name = ward_display_names.get(note.ward_id, note.ward_id)
         
-        # First try to use the ward_id directly from the note if available
-        if note.ward_id and note.ward_id in wards_data:
-            patient_ward = note.ward_id
-            ward_name = wards_data[note.ward_id].get("display_name", note.ward_id)
-            # Check if patient exists in this ward
-            if wards_data[note.ward_id].get("patients") and note.patient_id in wards_data[note.ward_id].get("patients", {}):
-                patient_name = wards_data[note.ward_id]["patients"][note.patient_id].get("name", "Unknown")
+        # Use stored patient name - no need to load ward data
+        patient_name = note.patient_name or "Unknown"
         
-        # If not found, search through all wards
-        if patient_name == "Unknown" or ward_name == "Unknown":
-            # Find patient info in loaded wards
-            for ward_num, ward_info in wards_data.items():
-                if ward_info.get("patients") and note.patient_id in ward_info.get("patients", {}):
-                    patient_name = ward_info["patients"][note.patient_id].get("name", "Unknown")
-                    patient_ward = ward_num
-                    ward_name = ward_info.get("display_name", ward_num)
-                    break
-        
-        # If we have a ward filter, skip this note if it doesn't match
-        if ward_id and patient_ward != ward_id:
-            continue
-        
-        # Get username
-        user = User.query.get(note.user_id)
-        username = user.username if user else "Unknown"
+        # Get username from our preloaded map
+        username = users_map.get(note.user_id, "Unknown")
         
         notes.append({
-            **note.to_dict(),
             'timestamp': note.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
             'patient_id': note.patient_id,
             'patient_name': patient_name,
@@ -900,29 +1014,27 @@ def admin_notes():
             'username': username
         })
     
-    # Get all users for the user filter
-    users = User.query.all()
+    # Get all available wards for the filter dropdown
+    wards = get_ward_metadata()
+    # Get all usernames for the filter dropdown - use a direct query
+    usernames = [u.username for u in User.query.with_entities(User.username)]
     
-    # Get all wards for the ward filter
-    sorted_wards = {}
-    for ward_id, info in sorted(wards_data.items(), key=lambda x: x[1]['display_name'].lower()):
-        sorted_wards[ward_id] = info
-    
-    # Calculate pagination values
-    pages = paginated_notes.pages
-    next_page = min(page + 1, pages) if pages else 1
-    prev_page = max(page - 1, 1)
-    
-    return render_template('admin_notes.html', 
-                          notes=notes, 
-                          users=users, 
-                          wards=sorted_wards, 
-                          filters=filters,
+    return render_template('admin_notes.html',
+                          notes=notes,
+                          wards=wards,
+                          usernames=usernames,
+                          filters={
+                              'ward': ward_id,
+                              'username': username,
+                              'date_from': date_from,
+                              'date_to': date_to,
+                              'applied': filters_applied
+                          },
                           page=page,
-                          pages=pages,
-                          next_page=next_page,
-                          prev_page=prev_page,
+                          pages=paginated_notes.pages,
                           total_notes=total_notes,
+                          prev_page=paginated_notes.prev_num or page,
+                          next_page=paginated_notes.next_num or page,
                           excel_export_available=EXCEL_EXPORT_AVAILABLE)
 
 @app.route('/admin/notes/export/<format>')
@@ -932,6 +1044,7 @@ def export_notes(format):
     if current_user.role != 'admin':
         flash('Access denied')
         return redirect(url_for('index'))
+    
     if format == 'excel' and not EXCEL_EXPORT_AVAILABLE:
         flash('Excel export is not available. Please install xlsxwriter package.', 'error')
         return redirect(url_for('admin_notes'))
@@ -965,6 +1078,10 @@ def export_notes(format):
     
     # Filter by ward if needed and collect all data
     export_data = []
+    
+    # Pre-load all ward data to avoid repeatedly loading it
+    for ward_num in wards_data.keys():
+        load_ward_patients(ward_num)
     
     for note in all_notes:
         # Get patient name and ward
@@ -1050,7 +1167,6 @@ def export_excel(data):
         
         # Generate filename with current date
         filename = f"notes_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-        
         return send_file(
             output,
             mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -1093,7 +1209,6 @@ def export_pdf(data):
     
     # Prepare table data
     table_data = [["Timestamp", "Ward", "Patient", "User", "Note"]]
-    
     for item in data:
         patient_info = f"{item['patient_name']}\nID: {item['patient_id']}"
         note_text = Paragraph(item['note'].replace('\n', '<br/>'), note_style)
@@ -1134,7 +1249,6 @@ def export_pdf(data):
     
     # Generate filename with current date
     filename = f"notes_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
-    
     return send_file(
         output,
         mimetype='application/pdf',
@@ -1149,12 +1263,6 @@ def init_carenotes():
         db.create_all()  # This will create any missing tables
         print("Care notes table created successfully.")
 
-@app.cli.command('create-carenotes')
-def create_carenotes():
-    """Create the care notes table."""
-    db.create_all()    
-    click.echo('Care notes table has been created.')
-
 @click.command('init-db')
 @with_appcontext
 def init_db_command():
@@ -1168,26 +1276,26 @@ if __name__ == '__main__':
     with app.app_context():
         db.create_all()
         
-        # Check if default_ward column exists in user table
+        # Check if columns exist and add if needed
         inspector = db.inspect(db.engine)
-        columns = [col['name'] for col in inspector.get_columns('user')]
-        if 'default_ward' not in columns:
-            db.engine.execute('ALTER TABLE user ADD COLUMN default_ward VARCHAR(50)')
         
-        # Create both databases and tables
-        db.create_all()
-        db.create_all(bind=['audit'])
-        
-        # Add default_ward column if it doesn't exist
-        inspector = db.inspect(db.engine)
-        columns = [col['name'] for col in inspector.get_columns('user')]
-        if 'default_ward' not in columns:
+        # Add default_ward column to User if needed
+        user_columns = [col['name'] for col in inspector.get_columns('user')]
+        if 'default_ward' not in user_columns:
             db.engine.execute('ALTER TABLE user ADD COLUMN default_ward VARCHAR(50)')
         
         # Add ward_id column to CareNote if needed
         carenote_columns = [col['name'] for col in inspector.get_columns('care_note')]
         if 'ward_id' not in carenote_columns:
             db.engine.execute('ALTER TABLE care_note ADD COLUMN ward_id VARCHAR(50)')
+            
+        # Add patient_name column to CareNote if needed
+        if 'patient_name' not in carenote_columns:
+            db.engine.execute('ALTER TABLE care_note ADD COLUMN patient_name VARCHAR(100)')
+        
+        # Create both databases and tables
+        db.create_all()
+        db.create_all(bind=['audit'])
         
         # Create default admin user if not exists
         if not User.query.filter_by(username='admin').first():
@@ -1197,7 +1305,7 @@ if __name__ == '__main__':
                 role='admin'
             )
             db.session.add(admin)
-            
+        
         # Create test user if not exists
         if not User.query.filter_by(username='nurse1').first():
             test_user = User(
@@ -1206,9 +1314,9 @@ if __name__ == '__main__':
                 role='user'
             )
             db.session.add(test_user)
-
+        
         db.session.commit()
-
+    
     # Try ports 5000-5010 until we find an available one
     for port in range(5000, 5011):
         try:
@@ -1219,4 +1327,4 @@ if __name__ == '__main__':
                 print(f"Port {port} is in use, trying next port...")
                 continue
             else:
-                raise
+                raise  # Re-raise other exceptions
