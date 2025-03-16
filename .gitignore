@@ -5,14 +5,19 @@ ward_*_records.pdf
 # Python virtual environment
 venv/
 env/
+ENV/
 
 # Python cache files
 __pycache__/
 *.py[cod]
+*$py.class
+*.so
+.Python
 
 # Database files
 *.db
 *.sqlite3
+*.sqlite
 
 # IDE specific files
 .vscode/
@@ -20,3 +25,23 @@ __pycache__/
 
 # OS specific files
 .DS_Store
+
+# Environment variables
+.env
+.env.*
+
+# Google API credentials
+client_secret*.json
+token.pickle
+*token.json
+google_credentials.json
+credentials.json
+
+# Local PDF files
+pdf_files/
+
+# Log files
+*.log
+
+# Flask session files
+flask_session/

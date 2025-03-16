@@ -20,6 +20,16 @@ from datetime import datetime, timedelta
 from flask import (Flask, render_template, request, jsonify, redirect, 
                   url_for, flash, session, make_response, send_file)
 from sqlalchemy import desc
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+# Import the Google Drive manager
+from google_drive import GoogleDriveManager
+
+# Initialize Google Drive manager
+drive_manager = GoogleDriveManager()
 
 # Define PDF_DIRECTORY near the top of the file, before any functions use it
 PDF_DIRECTORY = os.environ.get('PDF_DIRECTORY', '.')
@@ -435,43 +445,93 @@ def process_patient_data(info_lines):
 
 # Get ward metadata without processing patient data
 def get_ward_metadata():
+    # Try to load metadata from Google Drive
+    drive_metadata = drive_manager.get_ward_metadata()
+    if drive_metadata:
+        print("Using ward metadata from Google Drive")
+        return drive_metadata
+    
+    # Fallback to local files
+    print("Falling back to local PDF files")
     import re
     wards_meta = {}
-    ward_files = [f for f in os.listdir(PDF_DIRECTORY) if f.startswith('ward_') and f.endswith('_records.pdf')]
-    for pdf_filename in ward_files:
-        # Extract ward name/number between 'ward_' and '_records.pdf'
-        ward_part = pdf_filename[5:-12]  # Remove 'ward_' and '_records.pdf'
-        # For numbered wards that use Long_X format
-        if ward_part.startswith('Long_'):
-            display_name = f"Long {ward_part[5:]}"  # Convert Long_1 to "Long 1"
-        # For numeric ward names, prepend "Ward"
-        elif ward_part.isdigit():
-            display_name = f"Ward {ward_part}"
-        else:
-            display_name = ward_part  # Keep special ward names as is
-        wards_meta[ward_part] = {
-            "filename": os.path.join(PDF_DIRECTORY, pdf_filename),
-            "display_name": display_name,
-            "patients": {}  # Empty placeholder, will be filled on demand
-        }
-    # Sort wards
-    sorted_ward_nums = sorted(wards_meta.keys(), key=lambda x: wards_meta[x]["display_name"].lower())
-    sorted_wards_meta = {}
-    for ward_num in sorted_ward_nums:
-        sorted_wards_meta[ward_num] = wards_meta[ward_num]
-    return sorted_wards_meta
+    try:
+        if not os.path.exists(PDF_DIRECTORY):
+            print(f"Warning: PDF directory {PDF_DIRECTORY} does not exist")
+            return {}
+            
+        ward_files = [f for f in os.listdir(PDF_DIRECTORY) if f.startswith('ward_') and f.endswith('_records.pdf')]
+        print(f"Found {len(ward_files)} ward PDF files locally")
+        
+        for pdf_filename in ward_files:
+            # Extract ward name/number between 'ward_' and '_records.pdf'
+            ward_part = pdf_filename[5:-12]  # Remove 'ward_' and '_records.pdf'
+            # For numbered wards that use Long_X format
+            if ward_part.startswith('Long_'):
+                display_name = f"Long {ward_part[5:]}"  # Convert Long_1 to "Long 1"
+            # For numeric ward names, prepend "Ward"
+            elif ward_part.isdigit():
+                display_name = f"Ward {ward_part}"
+            else:
+                display_name = ward_part  # Keep special ward names as is
+            wards_meta[ward_part] = {
+                "filename": os.path.join(PDF_DIRECTORY, pdf_filename),
+                "display_name": display_name,
+                "patients": {}  # Empty placeholder, will be filled on demand
+            }
+        # Sort wards
+        sorted_ward_nums = sorted(wards_meta.keys(), key=lambda x: wards_meta[x]["display_name"].lower())
+        sorted_wards_meta = {}
+        for ward_num in sorted_ward_nums:
+            sorted_wards_meta[ward_num] = wards_meta[ward_num]
+        return sorted_wards_meta
+    except Exception as e:
+        print(f"Error in get_ward_metadata: {str(e)}")
+        return {}
 
 # Process a single ward PDF, with caching
 @lru_cache(maxsize=2)  # Reduce cache size to prevent memory issues
 def process_ward_pdf(pdf_filename):
-    if os.path.exists(pdf_filename):
+    # Check if we're using Google Drive or local files
+    if hasattr(wards_data.get(next(iter(wards_data), ''), {}), 'get') and wards_data.get(next(iter(wards_data), ''), {}).get('file_id'):
+        # Google Drive mode
+        # Find the file info based on filename
+        ward_id = None
+        file_id = None
+        
+        for w_id, info in wards_data.items():
+            if info.get("filename") == pdf_filename:
+                ward_id = w_id
+                file_id = info.get("file_id")
+                break
+        
+        if not file_id:
+            print(f"Could not find file ID for {pdf_filename}")
+            return {}
+        
         try:
-            patient_info = extract_patient_info(pdf_filename)
-            return patient_info
+            # Get local path to the file (downloads if needed)
+            local_path = drive_manager.get_local_path(file_id, pdf_filename)
+            
+            if local_path and os.path.exists(local_path):
+                patient_info = extract_patient_info(local_path)
+                return patient_info
+            else:
+                print(f"Could not get local path for {pdf_filename}")
+                return {}
         except Exception as e:
             print(f"Error processing {pdf_filename}: {str(e)}")
             return {}
-    return {}
+    else:
+        # Local file mode - original implementation
+        if os.path.exists(pdf_filename):
+            try:
+                patient_info = extract_patient_info(pdf_filename)
+                return patient_info
+            except Exception as e:
+                print(f"Error processing {pdf_filename}: {str(e)}")
+                return {}
+        return {}
 
 # Load a specific ward's data
 def load_specific_ward(ward_num):
@@ -487,9 +547,17 @@ def load_specific_ward(ward_num):
 
 def load_ward_data_background():
     global wards_data, is_loading_data
-    # First load metadata only (fast)
+    # First try initializing Google Drive
+    drive_initialized = drive_manager.initialize_service()
+    if drive_initialized:
+        print("Google Drive initialized successfully")
+    else:
+        print("Could not initialize Google Drive, using local files")
+
+    # Load ward metadata (either from Drive or locally)
     wards_data = get_ward_metadata()
     is_loading_data = False
+    print(f"Loaded metadata for {len(wards_data)} wards")
 
 # Start with just the metadata
 def init_ward_data():
@@ -727,15 +795,32 @@ def ward(ward_num):
     ward_num = unquote(ward_num)
     # Load this specific ward's data on demand
     load_specific_ward(ward_num)
-    ward_info = wards_data[ward_num]
     log_access('view_ward', f'Ward {ward_num}')
+    
     if ward_num not in wards_data:
-        return jsonify([])
+        flash("Ward not found", "error")
+        return redirect(url_for('index'))
+        
     ward_info = wards_data[ward_num]
+    
     # Get PDF creation (modification) time
-    import os
-    pdf_mtime = os.path.getmtime(ward_info["filename"])
-    pdf_creation_time = datetime.fromtimestamp(pdf_mtime).strftime("%Y-%m-%d %H:%M:%S")
+    pdf_creation_time = "Unknown"
+    
+    # Different handling for Google Drive vs local files
+    if ward_info.get("file_id"):
+        # Google Drive file
+        file_id = ward_info.get("file_id")
+        local_path = drive_manager.get_local_path(file_id, ward_info["filename"])
+        if local_path and os.path.exists(local_path):
+            pdf_mtime = os.path.getmtime(local_path)
+            pdf_creation_time = datetime.fromtimestamp(pdf_mtime).strftime("%Y-%m-%d %H:%M:%S")
+    else:
+        # Local file
+        filename = ward_info["filename"]
+        if os.path.exists(filename):
+            pdf_mtime = os.path.getmtime(filename)
+            pdf_creation_time = datetime.fromtimestamp(pdf_mtime).strftime("%Y-%m-%d %H:%M:%S")
+    
     patient_list = []
     if ward_info.get("patients"):
         # Create a simple list of patients for the template
@@ -744,6 +829,7 @@ def ward(ward_num):
                 "id": pid,
                 "name": data.get("name", "Unknown")
             })
+            
     return render_template('ward.html', 
                           ward_num=ward_num,
                           ward_data={"patients": ward_info.get("patients", {})},
@@ -1487,6 +1573,9 @@ def init_db_command():
 app.cli.add_command(init_db_command)
 
 if __name__ == '__main__':
+    # Initialize Google Drive
+    drive_manager.initialize_service()
+    
     with app.app_context():
         db.create_all()
         db.create_all(bind=['audit'])

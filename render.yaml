@@ -3,11 +3,19 @@ services:
     name: pdf-split-app
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn wsgi:app
+    startCommand: ./start_render.sh
     envVars:
       - key: SECRET_KEY
         generateValue: true
       - key: SESSION_COOKIE_SECURE
         value: "True"
       - key: PDF_DIRECTORY
-        value: "./pdf_files"  # Adjust this to the path where PDFs are stored on Render
+        value: "/tmp/pdf_cache"
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REDIRECT_URI
+        value: "https://pdf-split-app.onrender.com"
+      - key: GOOGLE_DRIVE_FOLDER_ID
+        sync: false
