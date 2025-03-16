@@ -1130,7 +1130,9 @@ def export_notes(format):
 
     if format == 'excel':
         if not EXCEL_EXPORT_AVAILABLE:
-            flash('Excel export is not available. Please install xlsxwriter package.', 'error')
+            error_msg = "Excel export is not available. Please ensure xlsxwriter package is installed."
+            print(error_msg)  # Log to server console
+            flash(error_msg, 'error')
             return redirect(url_for('admin_notes'))
         return export_excel(export_data)
     elif format == 'pdf':
@@ -1187,8 +1189,7 @@ def export_excel(data):
             download_name=filename
         )
     except Exception as e:
-        # Log the error
-        print(f"Excel export failed: {str(e)}")
+        print(f"Excel export failed: {str(e)}")  # Detailed server-side logging
         flash(f"Excel export failed: {str(e)}", "error")
         return redirect(url_for('admin_notes'))
 
