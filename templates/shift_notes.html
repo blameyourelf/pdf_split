@@ -13,7 +13,19 @@
 
 {% block content %}
 <div class="container">
-    <h1 class="title">My Shift Notes (Last 12 Hours)</h1>
+    <div class="header-with-actions">
+        <div class="title-section">
+            <h1 class="title">My Shift Notes</h1>
+            <p class="subtitle has-text-grey">Care notes you've added during downtime</p>
+        </div>
+        <a href="{{ url_for('my_shift_notes', show_all='1' if not show_all else '0') }}" 
+           class="button {% if show_all %}is-warning{% else %}is-info{% endif %} is-light">
+            <span class="icon">
+                <i class="fas {% if show_all %}fa-clock{% else %}fa-infinity{% endif %}"></i>
+            </span>
+            <span>{% if show_all %}Show Recent{% else %}Show All{% endif %}</span>
+        </a>
+    </div>
     
     <div class="notification is-info is-light mb-4">
         <p><strong>Note:</strong> Once the main EPR system is back online, use this view to find notes you need to transfer.</p>
@@ -48,6 +60,18 @@
 </div>
 
 <style>
+    .header-with-actions {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 2rem;
+    }
+    .title-section {
+        flex: 1;
+    }
+    .title-section .subtitle {
+        margin-top: -0.5rem;
+    }
     .notes-table th {
         background-color: #f7fafc;
     }

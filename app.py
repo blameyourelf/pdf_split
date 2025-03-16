@@ -126,6 +126,30 @@ class CareNote(db.Model):
             'patient_name': self.patient_name
         }
 
+# Add new Settings model
+class Settings(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    key = db.Column(db.String(50), unique=True, nullable=False)
+    value = db.Column(db.String(255))
+
+    @classmethod
+    def get_setting(cls, key, default=None):
+        setting = cls.query.filter_by(key=key).first()
+        return setting.value if setting else default
+
+    @classmethod
+    def set_setting(cls, key, value):
+        setting = cls.query.filter_by(key=key).first()
+        if setting:
+            setting.value = value
+        else:
+            setting = cls(key=key, value=value)
+            db.session.add(setting)
+        db.session.commit()
+
+def get_notes_enabled():
+    return Settings.get_setting('notes_enabled', 'true') == 'true'
+
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
@@ -756,7 +780,7 @@ def patient(patient_id):
                                ward_num=ward_num_found,
                                pdf_filename=ward_info["filename"],
                                pdf_creation_time=pdf_creation_time,
-                               notes_enabled=NOTES_ENABLED)
+                               notes_enabled=get_notes_enabled())
     return "Patient not found", 404
     
 @app.route('/pdf/<patient_id>')
@@ -839,21 +863,18 @@ def recent_patients():
     
 from flask_wtf.csrf import validate_csrf
 
-# Add global setting
-NOTES_ENABLED = True
-
-# Add a route to toggle notes functionality
 @app.route('/admin/toggle_notes', methods=['POST'])
 @login_required
 def toggle_notes():
-    global NOTES_ENABLED
-    
     if current_user.role != 'admin':
         flash('Access denied')
         return redirect(url_for('index'))
     
-    NOTES_ENABLED = not NOTES_ENABLED
-    status = 'enabled' if NOTES_ENABLED else 'disabled'
+    current_status = get_notes_enabled()
+    new_status = not current_status
+    Settings.set_setting('notes_enabled', str(new_status).lower())
+    
+    status = 'enabled' if new_status else 'disabled'
     flash(f'Note-adding functionality has been {status}', 'success')
     return redirect(request.referrer or url_for('admin_notes'))
 
@@ -861,7 +882,7 @@ def toggle_notes():
 @app.route('/add_care_note/<patient_id>', methods=['POST'])
 @login_required
 def add_care_note(patient_id):
-    if not NOTES_ENABLED:
+    if not get_notes_enabled():
         flash('Note-adding functionality is currently disabled by the administrator', 'note-error')
         return redirect(url_for('patient', patient_id=patient_id))
         
@@ -906,28 +927,40 @@ def add_care_note(patient_id):
 @app.route('/my_shift_notes')
 @login_required
 def my_shift_notes():
-    # Get notes from last 12 hours
-    cutoff = datetime.utcnow() - timedelta(hours=12)
-    notes = CareNote.query.filter_by(user_id=current_user.id)\
-        .filter(CareNote.timestamp >= cutoff)\
-        .order_by(CareNote.timestamp.desc())\
-        .all()
-    # Prepare notes with names - now using stored patient_name
+    show_all = request.args.get('show_all') == '1'
+    
+    # Build query
+    query = CareNote.query.filter_by(user_id=current_user.id)
+    
+    if not show_all:
+        # Only apply time filter if not showing all
+        cutoff = datetime.utcnow() - timedelta(hours=12)
+        query = query.filter(CareNote.timestamp >= cutoff)
+    
+    notes = query.order_by(CareNote.timestamp.desc()).all()
+    
+    # Prepare notes with names
     notes_with_names = []
+    
+    # Pre-load ward display names for efficiency
+    ward_display_names = {ward_id: info.get("display_name", ward_id) 
+                         for ward_id, info in wards_data.items()}
+    
     for note in notes:
-        # Preload ward display names for efficiency
-        ward_display_names = {ward_id: info.get("display_name", ward_id) 
-                              for ward_id, info in wards_data.items()}
         # Get ward name from our preloaded display names
         ward_name = ward_display_names.get(note.ward_id, note.ward_id)
         # Use stored patient_name
         patient_name = note.patient_name or "Unknown"
+        
         notes_with_names.append({
             **note.to_dict(),
             'patient_name': patient_name,
             'ward': ward_name
         })
-    return render_template('shift_notes.html', notes=notes_with_names)
+    
+    return render_template('shift_notes.html', 
+                         notes=notes_with_names,
+                         show_all=show_all)
 
 @app.route('/admin/notes')
 @login_required
@@ -1069,7 +1102,7 @@ def admin_notes():
                           prev_page=paginated_notes.prev_num or page,
                           next_page=paginated_notes.next_num or page,
                           excel_export_available=EXCEL_EXPORT_AVAILABLE,
-                          notes_enabled=NOTES_ENABLED)
+                          notes_enabled=get_notes_enabled())
 
 @app.route('/admin/notes/export/<format>')
 @login_required
