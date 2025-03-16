@@ -59,3 +59,20 @@ A Flask application for managing and viewing patient data from ward PDF files, w
 5. Set the start command to: `gunicorn wsgi:app`
 
 **Important**: For deployment, you'll need to manually upload the token file (`token.pickle`) to your Render instance or use the Render shell to run the authorization script.
+
+## Environment Setup
+
+1. Copy the environment template:
+   ```bash
+   cp .env.template .env
+   ```
+
+2. Update the `.env` file with your credentials:
+   ```
+   GOOGLE_CLIENT_ID=your-client-id
+   GOOGLE_CLIENT_SECRET=your-client-secret
+   GOOGLE_REDIRECT_URI=your-render-url
+   GOOGLE_DRIVE_FOLDER_ID=your-folder-id
+   ```
+
+3. Never commit the `.env` file - it's excluded in .gitignore

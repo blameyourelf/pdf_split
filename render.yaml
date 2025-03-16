@@ -19,3 +19,5 @@ services:
         value: "https://pdf-split-app.onrender.com"
       - key: GOOGLE_DRIVE_FOLDER_ID
         sync: false
+      - key: GOOGLE_TOKEN_BASE64
+        sync: false
