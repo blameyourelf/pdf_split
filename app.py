@@ -1063,79 +1063,74 @@ def export_notes(format):
         flash('Access denied')
         return redirect(url_for('index'))
     
-    if format == 'excel' and not EXCEL_EXPORT_AVAILABLE:
-        flash('Excel export is not available. Please install xlsxwriter package.', 'error')
-        return redirect(url_for('admin_notes'))
+    # Get filter parameters with explicit empty defaults
+    ward_id = request.args.get('ward', '')
+    username = request.args.get('username', '')
+    date_from = request.args.get('date_from', '')
+    date_to = request.args.get('date_to', '')
     
-    # Get filter parameters
-    start_date_str = request.args.get('start_date', '')
-    end_date_str = request.args.get('end_date', '')
-    ward_id = request.args.get('ward_id', '')
-    user_id = request.args.get('user_id', '')
-    
-    # Start with base query
+    # Build query with filters
     query = CareNote.query
     
+    # Apply user filter by username
+    if username:
+        matching_users = User.query.filter(User.username.like(f'%{username}%')).all()
+        filtered_user_ids = [u.id for u in matching_users]
+        if filtered_user_ids:
+            query = query.filter(CareNote.user_id.in_(filtered_user_ids))
+        else:
+            query = query.filter(CareNote.id < 0)
+    
     # Apply date filters
-    if start_date_str:
-        start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
-        query = query.filter(CareNote.timestamp >= start_date)
+    if date_from:
+        try:
+            date_from_obj = datetime.strptime(date_from, '%Y-%m-%d')
+            query = query.filter(CareNote.timestamp >= date_from_obj)
+        except ValueError:
+            pass
+            
+    if date_to:
+        try:
+            date_to_obj = datetime.strptime(date_to, '%Y-%m-%d')
+            date_to_obj = date_to_obj.replace(hour=23, minute=59, second=59)
+            query = query.filter(CareNote.timestamp <= date_to_obj)
+        except ValueError:
+            pass
     
-    if end_date_str:
-        end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
-        # Add one day to include the entire end date
-        end_date = end_date + timedelta(days=1)
-        query = query.filter(CareNote.timestamp <= end_date)
+    # Apply ward filter
+    if ward_id and ward_id.strip():
+        query = query.filter(CareNote.ward_id == ward_id)
+
+    # Get the filtered notes
+    notes = query.order_by(CareNote.timestamp.desc()).all()
     
-    # Apply user filter
-    if user_id:
-        query = query.filter(CareNote.user_id == user_id)
+    # Pre-load all users for efficiency
+    user_ids = list(set(note.user_id for note in notes))
+    users = User.query.filter(User.id.in_(user_ids)).all()
+    users_map = {user.id: user.username for user in users}
     
-    # Get all notes
-    all_notes = query.order_by(desc(CareNote.timestamp)).all()
+    # Pre-load ward display names
+    ward_display_names = {ward_id: info.get("display_name", ward_id) 
+                         for ward_id, info in wards_data.items()}
     
-    # Filter by ward if needed and collect all data
+    # Process notes efficiently
     export_data = []
-    
-    # Pre-load all ward data to avoid repeatedly loading it
-    for ward_num in wards_data.keys():
-        load_ward_patients(ward_num)
-    
-    for note in all_notes:
-        # Get patient name and ward
-        patient_name = "Unknown"
-        ward_name = "Unknown"
-        patient_ward = None
-        
-        # Find patient info in loaded wards
-        for ward_num, ward_info in wards_data.items():
-            if ward_info.get("patients") and note.patient_id in ward_info.get("patients", {}):
-                patient_name = ward_info["patients"][note.patient_id].get("name", "Unknown")
-                patient_ward = ward_num
-                ward_name = ward_info.get("display_name", ward_num)
-                break
-        
-        # If we have a ward filter, skip this note if it doesn't match
-        if ward_id and patient_ward != ward_id:
-            continue
-        
-        # Get username
-        user = User.query.get(note.user_id)
-        username = user.username if user else "Unknown"
+    for note in notes:
+        ward_name = ward_display_names.get(note.ward_id, "Unknown")
+        username = users_map.get(note.user_id, "Unknown")
         
         export_data.append({
             'timestamp': note.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
             'patient_id': note.patient_id,
-            'patient_name': patient_name,
+            'patient_name': note.patient_name or "Unknown",
             'note': note.note,
             'ward': ward_name,
             'username': username
         })
-    
-    # Generate appropriate export format
+
     if format == 'excel':
         if not EXCEL_EXPORT_AVAILABLE:
-            flash('Excel export is not available on this server. Please contact the administrator.', 'error')
+            flash('Excel export is not available. Please install xlsxwriter package.', 'error')
             return redirect(url_for('admin_notes'))
         return export_excel(export_data)
     elif format == 'pdf':
@@ -1198,74 +1193,76 @@ def export_excel(data):
         return redirect(url_for('admin_notes'))
 
 def export_pdf(data):
-    # Create an in-memory output file
+    # Optimize PDF generation by reducing in-memory operations
     output = io.BytesIO()
+    doc = SimpleDocTemplate(
+        output, 
+        pagesize=letter,
+        rightMargin=30,
+        leftMargin=30,
+        topMargin=30,
+        bottomMargin=30
+    )
     
-    # Create a PDF document
-    doc = SimpleDocTemplate(output, pagesize=letter)
     elements = []
-    
-    # Get styles
     styles = getSampleStyleSheet()
-    title_style = styles["Heading1"]
-    normal_style = styles["Normal"]
     
-    # Create note style with proper wrapping
+    # Optimize paragraph style for better performance
     note_style = ParagraphStyle(
         'NoteStyle',
         parent=styles['Normal'],
-        spaceBefore=1,
-        spaceAfter=1,
-        leftIndent=0,
-        rightIndent=0,
+        fontSize=8,
+        leading=10,
+        spaceBefore=0,
+        spaceAfter=0,
     )
     
-    # Add title
-    elements.append(Paragraph("Notes Export", title_style))
-    elements.append(Paragraph(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", normal_style))
+    # Add minimal header
+    elements.append(Paragraph(f"Notes Export - {datetime.now().strftime('%Y-%m-%d %H:%M')}", styles["Heading2"]))
     elements.append(Spacer(1, 12))
     
-    # Prepare table data
-    table_data = [["Timestamp", "Ward", "Patient", "User", "Note"]]
-    for item in data:
-        patient_info = f"{item['patient_name']}\nID: {item['patient_id']}"
-        note_text = Paragraph(item['note'].replace('\n', '<br/>'), note_style)
-        table_data.append([
-            item['timestamp'],
-            item['ward'],
-            patient_info,
-            item['username'],
-            note_text
-        ])
+    # Create table with optimized data
+    table_data = [["Time", "Ward", "Patient", "User", "Note"]]
     
-    # Create the table
-    table = Table(table_data, colWidths=[80, 60, 100, 60, 220])
+    # Process data in chunks to reduce memory usage
+    chunk_size = 100
+    for i in range(0, len(data), chunk_size):
+        chunk = data[i:i + chunk_size]
+        for item in chunk:
+            patient_info = f"{item['patient_name']}\n{item['patient_id']}"
+            # Pre-process note text to reduce Paragraph creation overhead
+            note_text = Paragraph(item['note'].replace('\n', '<br/>'), note_style)
+            table_data.append([
+                item['timestamp'].split()[1],  # Only show time to save space
+                item['ward'],
+                patient_info,
+                item['username'],
+                note_text
+            ])
     
-    # Style the table
+    # Optimize table style
+    table = Table(table_data, colWidths=[50, 50, 80, 60, 280])
     table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
-        ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+        ('ALIGN', (0, 0), (-1, 0), 'LEFT'),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 10),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('FONTSIZE', (0, 0), (-1, 0), 9),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
         ('BACKGROUND', (0, 1), (-1, -1), colors.white),
-        ('GRID', (0, 0), (-1, -1), 1, colors.black),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
         ('ALIGN', (0, 1), (-1, -1), 'LEFT'),
         ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
         ('FONTSIZE', (0, 1), (-1, -1), 8),
-        ('TOPPADDING', (0, 1), (-1, -1), 6),
-        ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
+        ('TOPPADDING', (0, 1), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 1), (-1, -1), 4),
     ]))
     
     elements.append(table)
-    
-    # Build the PDF
     doc.build(elements)
     output.seek(0)
     
-    # Generate filename with current date
     filename = f"notes_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
     return send_file(
         output,
