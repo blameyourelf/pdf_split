@@ -2,8 +2,9 @@ import random
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 from reportlab.lib.units import inch
-from reportlab.platypus import Table, TableStyle
+from reportlab.platypus import Table, TableStyle, Paragraph  # add Paragraph import
 from reportlab.lib import colors
+from reportlab.lib.styles import getSampleStyleSheet  # add getSampleStyleSheet import
 from datetime import datetime, timedelta
 
 # Lists for generating more realistic dummy data
@@ -94,6 +95,9 @@ def generate_patient_info(patient_id, ward_num):
     
     return patient_info
 
+styles = getSampleStyleSheet()  # get default styles
+normal_style = styles['Normal']  # choose a style to wrap the text
+
 def generate_care_notes(num_entries=10):
     notes = []
     current_date = datetime.now()
@@ -102,7 +106,9 @@ def generate_care_notes(num_entries=10):
         date = current_date.strftime("%Y-%m-%d %H:%M")
         staff = random.choice(staff_names)
         note = random.choice(care_notes)
-        notes.append([date, staff, note])
+        # Use Paragraph for the note, ensuring it wraps
+        wrapped_note = Paragraph(note, normal_style)
+        notes.append([date, staff, wrapped_note])
         current_date -= timedelta(hours=random.randint(4, 12))
     
     return notes

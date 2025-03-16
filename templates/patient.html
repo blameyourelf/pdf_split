@@ -325,7 +325,7 @@
                         <th>Notes</th>
                     </tr>
                 </thead>
-                <tbody>
+                <tbody id="care-notes-body">
                     {% for note in care_notes %}
                     <tr>
                         <td>
@@ -344,6 +344,23 @@
                     {% endfor %}
                 </tbody>
             </table>
+
+            {% if has_more_notes %}
+            <div class="has-text-centered mt-4">
+                <button id="load-more-btn" class="button is-info is-light" onclick="loadMoreNotes(50)">
+                    <span class="icon">
+                        <i class="fas fa-plus"></i>
+                    </span>
+                    <span>Load More Notes</span>
+                </button>
+                <div id="loading-more" class="mt-2" style="display: none;">
+                    <span class="icon">
+                        <i class="fas fa-spinner fa-spin"></i>
+                    </span>
+                    Loading more notes...
+                </div>
+            </div>
+            {% endif %}
         </div>
     </div>
 
@@ -374,6 +391,65 @@
     </div>
 
     <script>
+        // Add function to load more notes on demand
+        let currentOffset = 50; // Start after the initial 50 notes
+        
+        async function loadMoreNotes(offset) {
+            const loadingIndicator = document.getElementById('loading-more');
+            const loadMoreBtn = document.getElementById('load-more-btn');
+            
+            try {
+                loadingIndicator.style.display = 'block';
+                loadMoreBtn.disabled = true;
+                
+                const response = await fetch(`/load_more_notes/{{ patient_id }}/${offset}`);
+                if (!response.ok) {
+                    throw new Error('Failed to load more notes');
+                }
+                
+                const data = await response.json();
+                const tableBody = document.getElementById('care-notes-body');
+                
+                // Add new rows to the table
+                data.notes.forEach(note => {
+                    const row = document.createElement('tr');
+                    
+                    // Date column
+                    const dateCell = document.createElement('td');
+                    dateCell.textContent = note.date;
+                    row.appendChild(dateCell);
+                    
+                    // Staff column
+                    const staffCell = document.createElement('td');
+                    staffCell.textContent = note.staff;
+                    row.appendChild(staffCell);
+                    
+                    // Note column
+                    const noteCell = document.createElement('td');
+                    noteCell.textContent = note.note;
+                    row.appendChild(noteCell);
+                    
+                    // Add to table
+                    tableBody.appendChild(row);
+                });
+                
+                // Update offset for next load
+                currentOffset += data.notes.length;
+                
+                // Hide button if no more notes
+                if (!data.has_more) {
+                    loadMoreBtn.style.display = 'none';
+                }
+                
+            } catch (error) {
+                console.error('Error loading more notes:', error);
+            } finally {
+                loadingIndicator.style.display = 'none';
+                loadMoreBtn.disabled = false;
+            }
+        }
+        
+        // Existing functions
         function searchCareNotes() {
             const searchTerm = document.getElementById('care-notes-search').value.toLowerCase();
             const table = document.getElementById('care-notes-table');

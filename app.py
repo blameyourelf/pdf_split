@@ -121,120 +121,85 @@ is_loading_data = False
 
 def extract_patient_info(pdf_path):
     patient_data = {}
+    current_patient = None
+    current_patient_id = None
+    
     try:
         reader = PdfReader(pdf_path)
         
-        # Process each page as a potential patient record
-        for page_num, page in enumerate(reader.pages):
-            text = page.extract_text()
-            lines = text.split('\n')
+        # Process batches of pages to reduce memory usage
+        batch_size = 10
+        total_pages = len(reader.pages)
+        
+        for start_idx in range(0, total_pages, batch_size):
+            end_idx = min(start_idx + batch_size, total_pages)
             
-            # Initialize patient info for this page
-            patient_id = None
-            patient_name = None
-            patient_ward = None
-            patient_dob = None
-            care_notes = []
-            
-            # This flag will help us know what the next line contains
-            expecting_value = None
-            in_care_notes = False
-            care_notes_section_start = -1
-            
-            # Process each line
-            for i, line in enumerate(lines):
-                line = line.strip()
-                if not line:
-                    continue
+            for page_idx in range(start_idx, end_idx):
+                page = reader.pages[page_idx]
+                text = page.extract_text()
                 
-                # Check for the page title (start of a patient record)
-                if line.startswith("Patient Record - Ward"):
+                # Check if this is a new patient record
+                if "Patient Record - Ward" in text:
+                    # Save previous patient if exists
+                    if current_patient_id and current_patient:
+                        patient_data[current_patient_id] = current_patient
+                    
                     # Reset for new patient
-                    expecting_value = None
-                    in_care_notes = False
-                    continue
+                    current_patient = {
+                        "info": {},
+                        "name": "Unknown",
+                        "vitals": "",
+                        "care_notes": []
+                    }
+                    current_patient_id = None
                 
-                # Check if we're in the care notes section
-                if line == "Continuous Care Notes":
-                    in_care_notes = True
-                    care_notes_section_start = i
-                    continue
-                    
-                # If we're expecting a specific value...
-                if expecting_value:
-                    if expecting_value == "Patient ID":
-                        patient_id = line
-                    elif expecting_value == "Name":
-                        patient_name = line
-                    elif expecting_value == "Ward":
-                        patient_ward = line
-                    elif expecting_value == "DOB":
-                        patient_dob = line
-                    
-                    expecting_value = None
-                    continue
+                # Extract patient ID
+                id_match = re.search(r"Patient ID:\s*(\d+)", text)
+                if id_match and not current_patient_id:
+                    current_patient_id = id_match.group(1).strip()
                 
-                # Check for field labels
-                if line == "Patient ID:":
-                    expecting_value = "Patient ID"
-                elif line == "Name:":
-                    expecting_value = "Name"
-                elif line == "Ward:":
-                    expecting_value = "Ward"
-                elif line == "DOB:":
-                    expecting_value = "DOB"
-            
-            # Process care notes - we need special handling for the care notes section
-            if in_care_notes and care_notes_section_start > 0:
-                # Find the header row
-                header_row_idx = -1
-                for i in range(care_notes_section_start + 1, len(lines)):
-                    if lines[i].strip() == "Date & Time":
-                        header_row_idx = i
-                        break
+                # Extract name
+                name_match = re.search(r"Name:\s*([^\n]+)", text)
+                if name_match:
+                    current_patient["name"] = name_match.group(1).strip()
+                    current_patient["info"]["Name"] = current_patient["name"]
                 
-                if header_row_idx > 0:
-                    # We should have the header row and the next two rows are "Staff Member" and "Notes"
-                    # After that, the actual data starts in groups of 3 lines (date, staff, note)
-                    data_start_idx = header_row_idx + 3
-                    
-                    # Process care notes in groups of 3 lines
-                    i = data_start_idx
-                    while i < len(lines) - 2:
-                        date_line = lines[i].strip()
-                        staff_line = lines[i + 1].strip()
-                        note_line = lines[i + 2].strip()
-                        
-                        if date_line and staff_line:  # Ensure we have at least date and staff
-                            care_notes.append({
-                                "date": date_line,
-                                "staff": staff_line,
-                                "note": note_line
-                            })
-                        
-                        i += 3  # Move to next group of 3 lines
-            
-            # If we found a patient ID and name, add to our data
-            if patient_id and patient_name:
-                patient_info = {
-                    "Name": patient_name,
-                    "Ward": patient_ward,
-                    "DOB": patient_dob
-                }
+                # Extract ward
+                ward_match = re.search(r"Ward:\s*([^\n]+)", text)
+                if ward_match:
+                    current_patient["info"]["Ward"] = ward_match.group(1).strip()
                 
-                # Filter out None values
-                patient_info = {k: v for k, v in patient_info.items() if v is not None}
+                # Extract DOB
+                dob_match = re.search(r"DOB:\s*([^\n]+)", text)
+                if dob_match:
+                    current_patient["info"]["DOB"] = dob_match.group(1).strip()
                 
-                patient_data[patient_id] = {
-                    "info": patient_info,
-                    "name": patient_name,
-                    "vitals": "",
-                    "care_notes": care_notes
-                }
+                # Check for care notes section
+                if "Continuous Care Notes" in text:
+                    # Extract care notes with regex for better performance
+                    care_notes_pattern = r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2})\s+([^,]+, [A-Z]+)\s+(.+?)(?=\d{4}-\d{2}-\d{2} \d{2}:\d{2}|$)"
+                    for match in re.finditer(care_notes_pattern, text, re.DOTALL):
+                        if current_patient:
+                            date = match.group(1).strip()
+                            staff = match.group(2).strip()
+                            note = match.group(3).strip()
+                            
+                            # Add note if it looks valid
+                            if date and staff:
+                                current_patient["care_notes"].append({
+                                    "date": date,
+                                    "staff": staff,
+                                    "note": note
+                                })
+        
+        # Add the last patient
+        if current_patient_id and current_patient:
+            patient_data[current_patient_id] = current_patient
         
         return patient_data
-    
+        
     except Exception as e:
+        print(f"PDF extraction error: {str(e)}")
         return {}
 
 def process_patient_data(info_lines):
@@ -341,11 +306,15 @@ def get_ward_metadata():
     return sorted_wards_meta
 
 # Process a single ward PDF, with caching
-@lru_cache(maxsize=100)  # Cache more ward data
+@lru_cache(maxsize=5)  # Reduced cache size to prevent memory issues
 def process_ward_pdf(pdf_filename):
     if os.path.exists(pdf_filename):
-        patient_info = extract_patient_info(pdf_filename)
-        return patient_info
+        try:
+            patient_info = extract_patient_info(pdf_filename)
+            return patient_info
+        except Exception as e:
+            print(f"Error processing {pdf_filename}: {str(e)}")
+            return {}
     return {}
 
 # Load a specific ward's data
@@ -465,18 +434,31 @@ def ward(ward_num):
     # URL decode ward_num and load data
     ward_num = unquote(ward_num)
     load_specific_ward(ward_num)
+    
     if ward_num in wards_data:
         ward_info = wards_data[ward_num]
         log_access('view_ward', f'Ward {ward_num}')
+        
         # Get PDF creation (modification) time
         import os
         pdf_mtime = os.path.getmtime(ward_info["filename"])
         pdf_creation_time = datetime.fromtimestamp(pdf_mtime).strftime("%Y-%m-%d %H:%M:%S")
+        
+        patient_list = []
+        if ward_info.get("patients"):
+            # Create a simple list of patients for the template
+            for pid, data in ward_info["patients"].items():
+                patient_list.append({
+                    "id": pid, 
+                    "name": data.get("name", "Unknown")
+                })
+        
         return render_template('ward.html', 
-                               ward_num=ward_num,
-                               ward_data=ward_info,
-                               pdf_filename=ward_info["filename"],
-                               pdf_creation_time=pdf_creation_time)
+                              ward_num=ward_num,
+                              ward_data={"patients": ward_info.get("patients", {})},
+                              pdf_filename=ward_info["filename"],
+                              pdf_creation_time=pdf_creation_time)
+    
     return "Ward not found", 404
 
 @app.route('/search/<ward_num>')
@@ -556,44 +538,75 @@ def patient(patient_id):
         if ward_info.get("patients") and patient_id in ward_info["patients"]:
             ward_num_found = ward_num
             break
+            
     if not ward_num_found:
         for ward_num in wards_data:
             load_specific_ward(ward_num)
-            if patient_id in wards_data[ward_num]["patients"]:
+            if ward_num in wards_data and wards_data[ward_num]["patients"] and patient_id in wards_data[ward_num]["patients"]:
                 ward_num_found = ward_num
                 break
+                
     if ward_num_found:
         patient_data = wards_data[ward_num_found]["patients"][patient_id]
         log_access('view_patient', patient_id)
-        # Add recently viewed record
-        recent = RecentlyViewedPatient(
-            user_id=current_user.id,
-            patient_id=patient_id,
-            ward_num=ward_num_found,
-            patient_name=patient_data["name"]
-        )
-        db.session.add(recent)
-        older_views = RecentlyViewedPatient.query.filter_by(user_id=current_user.id)\
-            .order_by(RecentlyViewedPatient.viewed_at.desc())\
-            .offset(10).all()
-        for old in older_views:
-            db.session.delete(old)
-        db.session.commit()
+        
+        # Add recently viewed record - but limit to prevent database bloat
+        try:
+            # Check if patient was recently viewed to avoid duplicate entries
+            recent_view = RecentlyViewedPatient.query.filter_by(
+                user_id=current_user.id, 
+                patient_id=patient_id
+            ).first()
+            
+            if not recent_view:
+                recent = RecentlyViewedPatient(
+                    user_id=current_user.id,
+                    patient_id=patient_id,
+                    ward_num=ward_num_found,
+                    patient_name=patient_data["name"]
+                )
+                db.session.add(recent)
+                
+                # Limit to 10 recent patients per user
+                older_views = RecentlyViewedPatient.query.filter_by(user_id=current_user.id)\
+                    .order_by(RecentlyViewedPatient.viewed_at.desc())\
+                    .offset(10).all()
+                    
+                for old in older_views:
+                    db.session.delete(old)
+                    
+                db.session.commit()
+            else:
+                # Update timestamp for existing view
+                recent_view.viewed_at = datetime.utcnow()
+                db.session.commit()
+        except Exception as e:
+            # Log but don't fail the request if recording view history fails
+            print(f"Error recording patient view: {str(e)}")
+            db.session.rollback()
 
-        # Get PDF care notes from snapshot
+        # Get PDF care notes from snapshot - limit to most recent for performance
         pdf_notes = patient_data.get("care_notes", [])
+        if len(pdf_notes) > 50:  # Only show most recent 50 notes initially
+            pdf_notes = pdf_notes[:50]
+            has_more_notes = True
+        else:
+            has_more_notes = False
+            
         # Get new notes from the database
-        db_notes = [n.to_dict() for n in CareNote.query.filter_by(patient_id=patient_id).all()]
+        db_notes = [n.to_dict() for n in CareNote.query.filter_by(patient_id=patient_id)
+                   .order_by(CareNote.timestamp.desc()).limit(50).all()]
+                   
         for note in db_notes:
             user = User.query.get(note['user_id'])
             note['staff'] = user.username if user else 'Unknown'
             note['is_new'] = True
+            
         # Combine and sort notes (newest first)
         combined = pdf_notes + db_notes
-        # Use "timestamp" if available; otherwise use "date" from PDF notes
         combined.sort(key=lambda n: n.get('timestamp') or n.get('date', ''), reverse=True)
         
-        # Also get PDF file creation time
+        # Get PDF file creation time
         import os
         ward_info = wards_data[ward_num_found]
         pdf_mtime = os.path.getmtime(ward_info["filename"])
@@ -607,9 +620,11 @@ def patient(patient_id):
                                patient_info_dict=patient_data["info"],
                                vitals=patient_data.get("vitals", ""),
                                care_notes=combined,
+                               has_more_notes=has_more_notes,
                                ward_num=ward_num_found,
                                pdf_filename=ward_info["filename"],
                                pdf_creation_time=pdf_creation_time)
+                               
     return "Patient not found", 404
 
 @app.route('/pdf/<patient_id>')
@@ -770,6 +785,39 @@ def my_shift_notes():
         })
             
     return render_template('shift_notes.html', notes=notes_with_names)
+
+@app.route('/load_more_notes/<patient_id>/<int:offset>')
+@login_required
+def load_more_notes(patient_id, offset):
+    # Find ward for this patient
+    ward_num_found = None
+    for ward_num, ward_info in wards_data.items():
+        if ward_info.get("patients") and patient_id in ward_info["patients"]:
+            ward_num_found = ward_num
+            break
+    
+    if ward_num_found and patient_id in wards_data[ward_num_found]["patients"]:
+        patient_data = wards_data[ward_num_found]["patients"][patient_id]
+        
+        # Get the next batch of notes
+        pdf_notes = patient_data.get("care_notes", [])[offset:offset+50]
+        
+        # Prepare notes for JSON response
+        notes_data = []
+        for note in pdf_notes:
+            notes_data.append({
+                "date": note.get("date", ""),
+                "staff": note.get("staff", ""),
+                "note": note.get("note", ""),
+                "is_new": False
+            })
+            
+        return jsonify({
+            "notes": notes_data,
+            "has_more": len(patient_data.get("care_notes", [])) > offset + 50
+        })
+    
+    return jsonify({"error": "Patient not found"}), 404
 
 @app.cli.command('init-carenotes')
 def init_carenotes():

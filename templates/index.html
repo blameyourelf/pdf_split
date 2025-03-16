@@ -227,43 +227,6 @@
             });
         }
 
-        // Function to load patient counts for all wards
-        async function loadWardPatientCounts() {
-            const wardCards = document.querySelectorAll('.ward-card');
-            
-            // Process wards in batches to avoid too many concurrent requests
-            const batchSize = 10;
-            let currentBatch = 0;
-            
-            while (currentBatch < wardCards.length) {
-                const batch = Array.from(wardCards).slice(currentBatch, currentBatch + batchSize);
-                
-                // Load data for this batch
-                await Promise.allSettled(batch.map(async (card) => {
-                    const wardNum = card.getAttribute('data-ward');
-                    const countElement = card.querySelector('.patient-count');
-                    
-                    try {
-                        // Make request to load ward data
-                        const response = await fetch(`/ward_patient_count/${wardNum}`);
-                        
-                        if (response.ok) {
-                            const data = await response.json();
-                            countElement.innerHTML = `${data.count} Patients`;
-                        } else {
-                            countElement.innerHTML = "? Patients";
-                        }
-                    } catch (error) {
-                        console.error(`Error loading ward ${wardNum} patient count:`, error);
-                        countElement.innerHTML = "? Patients";
-                    }
-                }));
-                
-                // Move to next batch
-                currentBatch += batchSize;
-            }
-        }
-
         // Function to load recently viewed patients
         async function loadRecentPatients() {
             try {
@@ -322,7 +285,6 @@
 
         // Add to window load event listener
         window.addEventListener('DOMContentLoaded', () => {
-            loadWardPatientCounts();
             loadRecentPatients();
         });
     </script>
@@ -414,11 +376,6 @@
                     {{ ward_info.display_name }}
                 </h2>
                 <p class="ward-info">
-                    <span class="patient-count">
-                        <span class="ward-count-loading">
-                            <i class="fas fa-spinner"></i> Loading...
-                        </span>
-                    </span><br>
                     <small>{{ ward_info.filename }}</small>
                 </p>
             </a>
