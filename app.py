@@ -21,6 +21,10 @@ from flask import (Flask, render_template, request, jsonify, redirect,
                   url_for, flash, session, make_response, send_file)
 from sqlalchemy import desc
 
+# Define PDF_DIRECTORY near the top of the file, before any functions use it
+PDF_DIRECTORY = os.environ.get('PDF_DIRECTORY', '.')
+print(f"Using PDF directory: {os.path.abspath(PDF_DIRECTORY)}")
+
 # Try to import xlsxwriter but don't fail if not available
 try:
     import xlsxwriter
@@ -87,10 +91,6 @@ login_manager.login_message = 'Please log in to access this page.'
 login_manager.session_protection = "strong"
 
 # Add this after creating the Flask app but before the routes
-@app.context_processor
-def inject_year():
-    return {'year': datetime.utcnow().year}
-
 def get_git_info():
     try:
         # Get last commit date
@@ -437,7 +437,7 @@ def process_patient_data(info_lines):
 def get_ward_metadata():
     import re
     wards_meta = {}
-    ward_files = [f for f in os.listdir('.') if f.startswith('ward_') and f.endswith('_records.pdf')]
+    ward_files = [f for f in os.listdir(PDF_DIRECTORY) if f.startswith('ward_') and f.endswith('_records.pdf')]
     for pdf_filename in ward_files:
         # Extract ward name/number between 'ward_' and '_records.pdf'
         ward_part = pdf_filename[5:-12]  # Remove 'ward_' and '_records.pdf'
@@ -450,7 +450,7 @@ def get_ward_metadata():
         else:
             display_name = ward_part  # Keep special ward names as is
         wards_meta[ward_part] = {
-            "filename": pdf_filename,
+            "filename": os.path.join(PDF_DIRECTORY, pdf_filename),
             "display_name": display_name,
             "patients": {}  # Empty placeholder, will be filled on demand
         }
