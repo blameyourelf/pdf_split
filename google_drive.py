@@ -33,7 +33,13 @@ class GoogleDriveManager:
         self.redirect_uri = os.environ.get('GOOGLE_REDIRECT_URI')
         self.folder_id = os.environ.get('GOOGLE_DRIVE_FOLDER_ID')
         self.drive_service = None
-        self.token_path = os.path.join(CACHE_DIR, 'token.pickle')
+        
+        # Check multiple locations for the token file
+        self.possible_token_paths = [
+            os.path.join(CACHE_DIR, 'token.pickle'),  # Default temp location
+            '/tmp/pdf_cache/token.pickle',  # Explicit Render location
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), 'token.pickle')  # Project root
+        ]
         
         # Verify required environment variables
         self._check_environment()
@@ -49,20 +55,39 @@ class GoogleDriveManager:
             print(f"WARNING: Missing required environment variables: {', '.join(missing)}")
             print("Google Drive integration may not function correctly.")
     
+    def _find_token_file(self):
+        """Find the token file in any of the possible locations."""
+        for path in self.possible_token_paths:
+            if os.path.exists(path):
+                print(f"Found token file at: {path}")
+                return path
+        
+        print(f"No token file found. Searched in: {', '.join(self.possible_token_paths)}")
+        return None
+
     def _get_credentials(self):
         """Get valid credentials from token file or authorize."""
         creds = None
         
-        # Check if we have a saved token
-        if os.path.exists(self.token_path):
-            with open(self.token_path, 'rb') as token:
-                creds = pickle.load(token)
+        # Find token file
+        token_path = self._find_token_file()
+        if token_path:
+            try:
+                with open(token_path, 'rb') as token:
+                    creds = pickle.load(token)
+                print(f"Successfully loaded credentials from {token_path}")
+            except Exception as e:
+                print(f"Error loading credentials from {token_path}: {str(e)}")
+        else:
+            print("No token file found in any of the expected locations")
         
         # If no valid credentials, let's create the flow
         if not creds or not creds.valid:
             if creds and creds.expired and creds.refresh_token:
                 try:
                     creds.refresh(Request())
+                    # Save refreshed credentials
+                    self._save_credentials(creds)
                 except Exception as e:
                     print(f"Error refreshing token: {str(e)}")
                     creds = None
@@ -82,13 +107,21 @@ class GoogleDriveManager:
                 print("Authorization needed. Please generate token using auth_drive.py first.")
                 return None
                 
-            # Save the refreshed or new credentials
-            if creds:
-                with open(self.token_path, 'wb') as token:
-                    pickle.dump(creds, token)
-                
         return creds
     
+    def _save_credentials(self, creds):
+        """Save credentials to all possible locations."""
+        for path in self.possible_token_paths:
+            try:
+                # Ensure directory exists
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                
+                with open(path, 'wb') as token:
+                    pickle.dump(creds, token)
+                print(f"Saved credentials to {path}")
+            except Exception as e:
+                print(f"Error saving credentials to {path}: {str(e)}")
+
     def initialize_service(self):
         """Initialize the Drive API service."""
         try:

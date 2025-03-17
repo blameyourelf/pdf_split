@@ -28,8 +28,14 @@ load_dotenv()
 # Import the Google Drive manager
 from google_drive import GoogleDriveManager
 
+# Print debug info to help diagnose deployment issues
+print("PDF Split App starting...")
+print(f"Running from directory: {os.path.abspath('.')}")
+print(f"Temporary directory: {tempfile.gettempdir()}")
+
 # Initialize Google Drive manager
 drive_manager = GoogleDriveManager()
+print("Google Drive manager initialized")
 
 # Define PDF_DIRECTORY near the top of the file, before any functions use it
 PDF_DIRECTORY = os.environ.get('PDF_DIRECTORY', '.')
