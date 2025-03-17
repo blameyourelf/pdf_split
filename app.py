@@ -27,17 +27,17 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-# Import the Google Drive manager
-from google_drive import GoogleDriveManager
+# Import the Simple Drive client instead of GoogleDriveManager
+from simple_drive import SimpleDriveClient
 
 # Print debug info to help diagnose deployment issues
 print("PDF Split App starting...")
 print(f"Running from directory: {os.path.abspath('.')}")
 print(f"Temporary directory: {tempfile.gettempdir()}")
 
-# Initialize Google Drive manager
-drive_manager = GoogleDriveManager()
-print("Google Drive manager initialized")
+# Initialize Simple Drive client - only create instance, not initialize yet
+drive_client = SimpleDriveClient()
+print("Simple Drive client created")
 
 # Define PDF_DIRECTORY near the top of the file, before any functions use it
 PDF_DIRECTORY = os.environ.get('PDF_DIRECTORY', '.')
@@ -454,7 +454,7 @@ def process_patient_data(info_lines):
 def get_ward_metadata():
     global wards_data
     # Try to load metadata from Google Drive
-    drive_metadata = drive_manager.get_ward_metadata()
+    drive_metadata = drive_client.get_ward_metadata()
     if drive_metadata:
         print("Using ward metadata from Google Drive")
         return drive_metadata
@@ -510,7 +510,7 @@ def process_ward_pdf(pdf_filename):
         print(f"Downloading from Google Drive: {name} (ID: {file_id})")
         
         try:
-            local_path = drive_manager.get_local_path(file_id, name)
+            local_path = drive_client.get_local_path(file_id, name)
             if local_path:
                 print(f"Downloaded to local path: {local_path}")
                 try:
@@ -544,7 +544,7 @@ def process_ward_pdf(pdf_filename):
 # Load a specific ward's data
 def load_specific_ward(ward_num):
     """Load a specific ward's data."""
-    global wards_data, drive_manager
+    global wards_data  # Only declare global for variables we're modifying
     print(f"Loading specific ward: {ward_num}")
     
     # Make sure we're working with a valid ward
@@ -573,7 +573,7 @@ def load_specific_ward(ward_num):
             print(f"Loading Google Drive file: {filename} (ID: {file_id})")
             
             # Get local file path
-            local_path = drive_manager.get_local_path(file_id, filename)
+            local_path = drive_client.get_local_path(file_id, filename)
             if local_path and os.path.exists(local_path):
                 print(f"Processing PDF from local path: {local_path}")
                 patient_data = process_ward_pdf(local_path)
@@ -614,12 +614,12 @@ def load_specific_ward(ward_num):
 
 def load_ward_data_background():
     global wards_data, is_loading_data
-    # First try initializing Google Drive
-    drive_initialized = drive_manager.initialize_service()
-    if drive_initialized:
-        print("Google Drive initialized successfully")
+    
+    # Initialize the drive client
+    if drive_client.initialize():
+        print("Simple Drive client initialized successfully")
     else:
-        print("Could not initialize Google Drive, using local files")
+        print("Could not initialize Simple Drive client, using local files")
 
     # Load ward metadata (either from Drive or locally)
     metadata = get_ward_metadata()
@@ -642,6 +642,12 @@ def init_ward_data():
 @app.before_first_request
 def before_first_request():
     """Initialize data before first request."""
+    global drive_client
+    # Initialize the drive client
+    if not drive_client:
+        drive_client = SimpleDriveClient()
+    drive_client.initialize()
+    # Initialize ward data
     init_ward_data()
 
 # Initialize with metadata
@@ -871,7 +877,7 @@ def profile():
 @login_required
 def ward(ward_num):
     """Ward view route handler"""
-    global wards_data, drive_manager
+    global wards_data
     # URL decode the ward_num to handle special characters
     ward_num = unquote(ward_num)
     
@@ -887,10 +893,10 @@ def ward(ward_num):
     if not wards_data:
         print("Ward data is empty, reloading metadata...")
         # Initialize drive manager again if needed
-        global drive_manager
-        if not drive_manager:
-            drive_manager = GoogleDriveManager()
-            drive_manager.initialize_service()
+        global drive_client
+        if not drive_client:
+            drive_client = SimpleDriveClient()
+            drive_client.initialize()
             
         metadata = get_ward_metadata()
         if metadata:
@@ -901,9 +907,9 @@ def ward(ward_num):
     # If still not found, try reloading one last time
     if normalized_ward not in wards_data:
         print(f"Ward {normalized_ward} not found, forcing metadata reload...")
-        # Try one more time with fresh GoogleDriveManager
-        drive_manager = GoogleDriveManager()
-        drive_manager.initialize_service()
+        # Try one more time with fresh SimpleDriveClient
+        drive_client = SimpleDriveClient()
+        drive_client.initialize()
         metadata = get_ward_metadata()
         if metadata:
             wards_data.clear()
@@ -949,7 +955,7 @@ def ward(ward_num):
     try:
         if "file_id" in ward_info:
             file_id = ward_info["file_id"]
-            local_path = drive_manager.get_local_path(file_id, ward_info["filename"])
+            local_path = drive_client.get_local_path(file_id, ward_info["filename"])
             if local_path and os.path.exists(local_path):
                 pdf_mtime = os.path.getmtime(local_path)
                 pdf_creation_time = datetime.fromtimestamp(pdf_mtime).strftime("%Y-%m-%d %H:%M:%S")
@@ -1704,8 +1710,8 @@ def init_db_command():
 app.cli.add_command(init_db_command)
 
 if __name__ == '__main__':
-    # Initialize Google Drive
-    drive_manager.initialize_service()
+    # Initialize the drive client
+    drive_client.initialize()
     
     with app.app_context():
         db.create_all()
