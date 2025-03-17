@@ -544,7 +544,7 @@ def process_ward_pdf(pdf_filename):
 # Load a specific ward's data
 def load_specific_ward(ward_num):
     """Load a specific ward's data."""
-    global wards_data
+    global wards_data, drive_manager
     print(f"Loading specific ward: {ward_num}")
     
     # Make sure we're working with a valid ward
@@ -573,13 +573,6 @@ def load_specific_ward(ward_num):
             print(f"Loading Google Drive file: {filename} (ID: {file_id})")
             
             # Get local file path
-            from google_drive import GoogleDriveManager
-            if not drive_manager or not drive_manager.drive_service:
-                # Re-initialize if needed
-                global drive_manager
-                drive_manager = GoogleDriveManager()
-                drive_manager.initialize_service()
-                
             local_path = drive_manager.get_local_path(file_id, filename)
             if local_path and os.path.exists(local_path):
                 print(f"Processing PDF from local path: {local_path}")
@@ -878,7 +871,7 @@ def profile():
 @login_required
 def ward(ward_num):
     """Ward view route handler"""
-    global wards_data
+    global wards_data, drive_manager
     # URL decode the ward_num to handle special characters
     ward_num = unquote(ward_num)
     
