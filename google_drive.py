@@ -71,7 +71,7 @@ class GoogleDriveManager:
         
         # Find token file
         token_path = self._find_token_file()
-        if token_path:
+        if (token_path):
             try:
                 with open(token_path, 'rb') as token:
                     creds = pickle.load(token)
@@ -210,17 +210,29 @@ class GoogleDriveManager:
         """Get metadata for all ward PDF files."""
         import re
         wards_meta = {}
+        
+        # First check if we can initialize the service
+        if not self.drive_service and not self.initialize_service():
+            print("Failed to initialize Google Drive service")
+            return {}
+        
+        print("Fetching files from Google Drive folder...")
         files = self.list_pdf_files()
         
         if not files:
             print("No PDF files found in Google Drive folder")
+            print(f"Folder ID: {self.folder_id}")
             return {}
-            
+        
+        print(f"Found {len(files)} PDF files in Google Drive")    
         for file in files:
             filename = file['name']
+            print(f"Processing file: {filename}")
             if filename.startswith('ward_') and filename.endswith('_records.pdf'):
                 # Extract ward name/number between 'ward_' and '_records.pdf'
                 ward_part = filename[5:-12]  # Remove 'ward_' and '_records.pdf'
+                
+                print(f"Extracted ward part: {ward_part}")
                 
                 # For numbered wards that use Long_X format
                 if ward_part.startswith('Long_'):
@@ -237,8 +249,11 @@ class GoogleDriveManager:
                     "display_name": display_name,
                     "patients": {}  # Empty placeholder, will be filled on demand
                 }
-                print(f"Found ward: {display_name} ({filename})")
+                print(f"Added ward: {ward_part} -> {display_name}")
         
+        if not wards_meta:
+            print("No ward PDF files found in Google Drive folder")
+            
         # Sort wards
         sorted_ward_nums = sorted(wards_meta.keys(), key=lambda x: wards_meta[x]["display_name"].lower())
         sorted_wards_meta = {}

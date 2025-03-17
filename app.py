@@ -499,58 +499,85 @@ def get_ward_metadata():
 # Process a single ward PDF, with caching
 @lru_cache(maxsize=2)  # Reduce cache size to prevent memory issues
 def process_ward_pdf(pdf_filename):
-    # Check if we're using Google Drive or local files
-    if hasattr(wards_data.get(next(iter(wards_data), ''), {}), 'get') and wards_data.get(next(iter(wards_data), ''), {}).get('file_id'):
-        # Google Drive mode
-        # Find the file info based on filename
-        ward_id = None
-        file_id = None
-        
-        for w_id, info in wards_data.items():
-            if info.get("filename") == pdf_filename:
-                ward_id = w_id
-                file_id = info.get("file_id")
-                break
-        
-        if not file_id:
-            print(f"Could not find file ID for {pdf_filename}")
-            return {}
+    """Process a PDF file and extract patient data."""
+    print(f"Processing PDF: {pdf_filename}")
+    
+    # If it's a Google Drive file (has a file_id)
+    if isinstance(pdf_filename, dict) and "file_id" in pdf_filename:
+        file_id = pdf_filename["file_id"]
+        name = pdf_filename["filename"]
+        print(f"Downloading from Google Drive: {name} (ID: {file_id})")
         
         try:
-            # Get local path to the file (downloads if needed)
-            local_path = drive_manager.get_local_path(file_id, pdf_filename)
-            
-            if local_path and os.path.exists(local_path):
-                patient_info = extract_patient_info(local_path)
-                return patient_info
+            local_path = drive_manager.get_local_path(file_id, name)
+            if local_path:
+                print(f"Downloaded to local path: {local_path}")
+                try:
+                    patient_info = extract_patient_info(local_path)
+                    print(f"Successfully extracted info for {len(patient_info)} patients")
+                    return patient_info
+                except Exception as e:
+                    print(f"Error extracting patient info: {str(e)}")
+                    return {}
             else:
-                print(f"Could not get local path for {pdf_filename}")
+                print(f"Could not get local path for {name}")
                 return {}
         except Exception as e:
-            print(f"Error processing {pdf_filename}: {str(e)}")
+            print(f"Error processing {name}: {str(e)}")
             return {}
+    # Local file mode
     else:
-        # Local file mode - original implementation
         if os.path.exists(pdf_filename):
             try:
+                print(f"Processing local file: {pdf_filename}")
                 patient_info = extract_patient_info(pdf_filename)
+                print(f"Successfully extracted info for {len(patient_info)} patients")
                 return patient_info
             except Exception as e:
                 print(f"Error processing {pdf_filename}: {str(e)}")
                 return {}
+        else:
+            print(f"File not found: {pdf_filename}")
         return {}
 
 # Load a specific ward's data
 def load_specific_ward(ward_num):
+    """Load a specific ward's data."""
+    print(f"Loading specific ward: {ward_num}")
     global wards_data
-    # Always clear cache when loading a ward
+    
+    # Clear cache to ensure fresh data
     process_ward_pdf.cache_clear()
+    
     if ward_num in wards_data:
-        pdf_filename = wards_data[ward_num]["filename"]
-        patient_data = process_ward_pdf(pdf_filename)
+        ward_info = wards_data[ward_num]
+        print(f"Found ward in wards_data: {ward_num}")
+        
+        # Handle Google Drive file if available
+        if "file_id" in ward_info:
+            print(f"Using Google Drive file for ward: {ward_num}")
+            file_id = ward_info["file_id"]
+            filename = ward_info["filename"]
+            
+            # Pass the ward info dict directly to process_ward_pdf
+            patient_data = process_ward_pdf(ward_info)
+        else:
+            # Local file mode
+            pdf_filename = ward_info["filename"]
+            print(f"Using local file for ward: {ward_num}")
+            
+            if os.path.exists(pdf_filename):
+                patient_data = process_ward_pdf(pdf_filename)
+            else:
+                print(f"PDF file not found: {pdf_filename}")
+                patient_data = {}
+        
         wards_data[ward_num]["patients"] = patient_data
+        print(f"Loaded {len(patient_data)} patients for ward: {ward_num}")
+        return True
     else:
-        pass
+        print(f"Ward not found in ward data: {ward_num}")
+        return False
 
 def load_ward_data_background():
     global wards_data, is_loading_data
@@ -795,16 +822,27 @@ def profile():
                          wards=wards,
                          current_ward=current_user.default_ward)
 
+# Enhance the ward route with better debugging
 @app.route('/ward/<ward_num>')
 @login_required
 def ward(ward_num):
     # URL decode the ward_num to handle special characters
     ward_num = unquote(ward_num)
+    
+    print(f"Accessing ward: {ward_num}")
+    print(f"Available wards: {list(wards_data.keys())}")
+    
     # Load this specific ward's data on demand
-    load_specific_ward(ward_num)
+    try:
+        load_specific_ward(ward_num)
+        print(f"Successfully loaded ward data for: {ward_num}")
+    except Exception as e:
+        print(f"Error loading ward data: {str(e)}")
+    
     log_access('view_ward', f'Ward {ward_num}')
     
     if ward_num not in wards_data:
+        print(f"Ward not found in wards_data: {ward_num}")
         flash("Ward not found", "error")
         return redirect(url_for('index'))
         
