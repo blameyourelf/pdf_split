@@ -44,12 +44,12 @@
             <tbody>
                 {% for note in notes %}
                 <tr>
-                    <td>{{ note.timestamp }}</td>
-                    <td>{{ note.ward }}</td>
+                    <td>{{ note.timestamp.strftime('%Y-%m-%d %H:%M') }}</td>
+                    <td>{{ ward_names.get(note.ward_id, 'Unknown Ward') }}</td>
                     <td>
-                        {{ note.patient_name }}
-                        <br>
-                        <small class="has-text-grey">ID: {{ note.patient_id }}</small>
+                        <a href="{{ url_for('patient', patient_id=note.patient_id) }}">
+                            {{ note.patient_name }}
+                        </a>
                     </td>
                     <td style="white-space: pre-wrap;">{{ note.note | replace('\n', '<br>') | safe }}</td>
                 </tr>

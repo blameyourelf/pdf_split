@@ -9,6 +9,7 @@ import base64
 import requests
 import json
 import time
+import tempfile
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 
@@ -17,9 +18,14 @@ class SimpleDriveClient:
     
     def __init__(self):
         self.token = None
-        self.token_path = os.path.join(os.path.dirname(__file__), 'token.pickle')
-        self.alt_token_path = '/tmp/pdf_cache/token.pickle'
-        os.makedirs(os.path.dirname(self.alt_token_path), exist_ok=True)
+        # Use a more reliable approach for token paths
+        self.cache_dir = os.path.join(tempfile.gettempdir(), 'pdf_cache')
+        os.makedirs(self.cache_dir, exist_ok=True)
+        self.token_path = os.path.join(os.getcwd(), 'token.pickle')
+        self.alt_token_path = os.path.join(self.cache_dir, 'token.pickle')
+        
+        # Ensure the cache directory exists
+        os.makedirs(self.cache_dir, exist_ok=True)
         
         # Load credentials from base64 encoded token if available
         encoded_token = os.environ.get('GOOGLE_TOKEN_BASE64')

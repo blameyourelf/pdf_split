@@ -73,6 +73,25 @@ echo "Running Google Drive diagnostics..."
 python check_google_drive.py > ./logs/drive_diagnostics.log 2>&1
 echo "Diagnostics completed. See logs/drive_diagnostics.log for details."
 
+# Check if database exists, if not initialize it
+if [ ! -f "instance/patient_data.db" ]; then
+    echo "Database not found, initializing..."
+    
+    # Create database schema
+    python -m database_schema
+    
+    # Populate database from Google Drive if GOOGLE_DRIVE_FOLDER_ID is set
+    if [ -n "$GOOGLE_DRIVE_FOLDER_ID" ]; then
+        echo "Populating database from Google Drive..."
+        python populate_database.py --google-drive
+    else
+        echo "Populating database from local PDFs..."
+        python populate_database.py
+    fi
+    
+    echo "Database initialization complete."
+fi
+
 # Start the application with Gunicorn
 echo "Starting Gunicorn server..."
 export PYTHONUNBUFFERED=1

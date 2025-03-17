@@ -152,7 +152,8 @@
             loadingEl.style.display = 'flex';
             patientList.style.display = 'none';
             
-            const response = await fetch(`/search/{{ ward_num }}?q=${encodeURIComponent(query)}`);
+            // Change this line to use the search_ward endpoint instead of search
+            const response = await fetch(`/search_ward/{{ ward_num }}?q=${encodeURIComponent(query)}`);
             if (!response.ok) {
                 throw new Error('Search failed');
             }

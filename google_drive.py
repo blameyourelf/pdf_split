@@ -36,28 +36,19 @@ from googleapiclient import discovery
 class GoogleDriveManager:
     """Google Drive integration for managing PDF files."""
     
-    def __init__(self):
-        self.drive_service = None
-        self.folder_id = os.environ.get('GOOGLE_DRIVE_FOLDER_ID', '')
-        self.token_path = os.path.join(os.path.dirname(__file__), 'token.pickle')
-        # Create alternate token path for containerized environments
-        self.alt_token_path = '/tmp/pdf_cache/token.pickle'
-        os.makedirs(os.path.dirname(self.alt_token_path), exist_ok=True)
-        
-        # If environment has encoded token, decode it
-        encoded_token = os.environ.get('GOOGLE_TOKEN_BASE64')
-        if encoded_token:
-            try:
-                token_data = base64.b64decode(encoded_token)
-                # Write to both locations for maximum compatibility
-                with open(self.token_path, 'wb') as token_file:
-                    token_file.write(token_data)
-                with open(self.alt_token_path, 'wb') as token_file:
-                    token_file.write(token_data)
-                print(f"Decoded token saved to {self.token_path} and {self.alt_token_path}")
-            except Exception as e:
-                print(f"Error decoding token: {str(e)}")
-    
+    def __init__(self, drive_client):
+        self.drive_client = drive_client
+
+    def get_ward_metadata(self):
+        """Get metadata for all ward PDF files."""
+        # Implement the logic to fetch ward metadata from Google Drive
+        # Example:
+        # return {
+        #     "ward_1": {"display_name": "Ward 1", "filename": "ward_1_records.pdf", "patients": {...}},
+        #     ...
+        # }
+        # ...existing code...
+
     def initialize_service(self):
         """Initialize Google Drive API service with robust error handling."""
         try:

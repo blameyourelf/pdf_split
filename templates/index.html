@@ -216,15 +216,19 @@
                 });
                 return;
             }
-
-            const response = await fetch(`/search_wards?q=${encodeURIComponent(query)}`);
-            const results = await response.json();
-            const wardNumbers = new Set(results.map(r => r.ward_num));
             
-            document.querySelectorAll('.ward-card').forEach(card => {
-                const wardNum = card.getAttribute('data-ward');
-                card.style.display = wardNumbers.has(wardNum) ? '' : 'none';
-            });
+            try {
+                const response = await fetch(`/search_wards?q=${encodeURIComponent(query)}`);
+                const results = await response.json();
+                const wardIds = new Set(results.map(r => r.id));
+                
+                document.querySelectorAll('.ward-card').forEach(card => {
+                    const wardId = card.getAttribute('data-ward');
+                    card.style.display = wardIds.has(wardId) ? '' : 'none';
+                });
+            } catch (error) {
+                console.error('Error during search:', error);
+            }
         }
 
         // Function to load recently viewed patients
@@ -339,16 +343,16 @@
         {% endif %}
 
         <div class="ward-grid">
-            {% for ward_num, ward_info in wards.items() %}
-            <a href="{{ url_for('ward', ward_num=ward_num) | replace('%20', ' ') }}" class="ward-card" data-ward="{{ ward_num }}">
+            {% for ward in wards %}
+            <a href="{{ url_for('ward', ward_num=ward.id) | replace('%20', ' ') }}" class="ward-card" data-ward="{{ ward.id }}">
                 <div class="ward-icon">
                     <i class="fas fa-hospital-user"></i>
                 </div>
                 <h2 class="ward-title">
-                    {{ ward_info.display_name }}
+                    {{ ward.display_name }}
                 </h2>
                 <p class="ward-info">
-                    <small>{{ ward_info.filename }}</small>
+                    <small>{{ ward.filename }}</small>
                 </p>
             </a>
             {% endfor %}

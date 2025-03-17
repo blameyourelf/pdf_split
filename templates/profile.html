@@ -38,9 +38,9 @@
                     <div class="select is-fullwidth">
                         <select name="default_ward">
                             <option value="">No default ward</option>
-                            {% for ward_id, ward_info in wards.items() %}
-                                <option value="{{ ward_id }}" {% if current_ward == ward_id %}selected{% endif %}>
-                                    {{ ward_info.display_name }}
+                            {% for ward in wards %}
+                                <option value="{{ ward.id }}" {% if current_ward == ward.id %}selected{% endif %}>
+                                    {{ ward.display_name }}
                                 </option>
                             {% endfor %}
                         </select>

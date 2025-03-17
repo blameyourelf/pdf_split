@@ -47,5 +47,25 @@ def add_ward_id_column():
             db.session.rollback()
             sys.exit(1)
 
+def add_created_at_column():
+    """Add created_at column to User table if it doesn't exist"""
+    with app.app_context():
+        try:
+            # Check if column exists
+            inspector = inspect(db.engine)
+            columns = [col['name'] for col in inspector.get_columns('user')]
+            
+            if 'created_at' not in columns:
+                print("Adding created_at column to User table...")
+                db.engine.execute('ALTER TABLE user ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP')
+                print("Column added successfully!")
+                
+        except OperationalError as e:
+            print(f"Database error: {str(e)}")
+        except Exception as e:
+            print(f"Unexpected error: {str(e)}")
+            db.session.rollback()
+
 if __name__ == "__main__":
     add_ward_id_column()
+    add_created_at_column()
