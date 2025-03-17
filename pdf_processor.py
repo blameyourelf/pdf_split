@@ -5,6 +5,21 @@ from functools import lru_cache
 from typing import Dict, Any
 import traceback
 
+# Add new alternative extraction function for files without bookmarks
+def extract_patients_from_text(pdf) -> Dict[str, Any]:
+    """Extract patient data by scanning each page text if no bookmarks exist."""
+    patient_data = {}
+    for page_number in range(len(pdf)):
+        text = pdf[page_number].get_text()
+        # Look for patterns like "Patient: John Smith (12345678)"
+        for match in re.finditer(r'Patient:\s+(.*?)\s+\((\d+)\)', text):
+            name = match.group(1).strip()
+            patient_id = match.group(2).strip()
+            if patient_id not in patient_data:
+                patient_data[patient_id] = {"name": name, "page": page_number}
+                print(f"Alternative extraction found patient: {name} ({patient_id}) on page {page_number}")
+    return patient_data
+
 @lru_cache(maxsize=32)
 def process_ward_pdf(pdf_path):
     """Process a ward PDF and extract patient data with robust error handling."""
@@ -53,10 +68,11 @@ def process_ward_pdf(pdf_path):
             print(f"Found {len(toc)} bookmarks")
             
             if len(toc) == 0:
-                # Try to extract patients without bookmarks
-                print("No bookmarks found, trying to extract patient data from content")
-                # This is where you could add alternative extraction logic
-                return {}
+                print("No bookmarks found, attempting alternative text extraction")
+                patient_data = extract_patients_from_text(pdf)
+                pdf.close()
+                print(f"Alternative extraction found {len(patient_data)} patients")
+                return patient_data
                 
             # Process bookmarks to extract patient data
             for item in toc:
