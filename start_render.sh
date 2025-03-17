@@ -23,11 +23,18 @@ echo "Checking environment variables..."
 [ -n "$GOOGLE_REDIRECT_URI" ] && echo "✓ GOOGLE_REDIRECT_URI is set" || echo "✗ GOOGLE_REDIRECT_URI is not set"
 [ -n "$GOOGLE_DRIVE_FOLDER_ID" ] && echo "✓ GOOGLE_DRIVE_FOLDER_ID is set" || echo "✗ GOOGLE_DRIVE_FOLDER_ID is not set"
 [ -n "$GOOGLE_TOKEN_BASE64" ] && echo "✓ GOOGLE_TOKEN_BASE64 is set" || echo "✗ GOOGLE_TOKEN_BASE64 is not set"
+[ -n "$GOOGLE_REFRESH_TOKEN" ] && echo "✓ GOOGLE_REFRESH_TOKEN is set" || echo "✗ GOOGLE_REFRESH_TOKEN is not set"
 
-# Check for Python and pip
-echo "Checking Python installation..."
-which python && python --version
-which pip && pip --version
+# Try to create a token from refresh token if available
+if [ -n "$GOOGLE_REFRESH_TOKEN" ]; then
+    echo "Found GOOGLE_REFRESH_TOKEN, creating token file..."
+    python create_token.py
+    if [ -f "./token.pickle" ]; then
+        echo "Created token file from refresh token"
+        cp ./token.pickle "$TOKEN_PATH"
+        echo "Copied token to $TOKEN_PATH"
+    fi
+fi
 
 # If we have a base64-encoded token in an environment variable, decode it
 if [ -n "$GOOGLE_TOKEN_BASE64" ]; then
@@ -38,8 +45,8 @@ if [ -n "$GOOGLE_TOKEN_BASE64" ]; then
     if [ -f "$TOKEN_PATH" ]; then
         echo "✓ Token successfully decoded and saved to $TOKEN_PATH"
         ls -la "$TOKEN_PATH"
-        echo "File contents (first 20 bytes, hex):"
-        hexdump -n 20 -C "$TOKEN_PATH"
+        echo "File contents (first 20 bytes):"
+        head -c 20 "$TOKEN_PATH" | xxd
     else
         echo "✗ Failed to create token file at $TOKEN_PATH"
     fi

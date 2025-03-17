@@ -71,13 +71,41 @@ class GoogleDriveManager:
         
         # Find token file
         token_path = self._find_token_file()
-        if (token_path):
+        if token_path:
             try:
                 with open(token_path, 'rb') as token:
-                    creds = pickle.load(token)
+                    # Try different ways to decode the token
+                    try:
+                        print(f"Loading token from {token_path} (standard way)")
+                        creds = pickle.load(token)
+                    except Exception as e1:
+                        print(f"Error loading token (standard way): {str(e1)}")
+                        try:
+                            # Reset file pointer
+                            token.seek(0)
+                            # Try direct Credentials creation
+                            print("Trying to create credentials directly from token data")
+                            token_data = json.load(token)
+                            creds = Credentials.from_authorized_user_info(token_data)
+                        except Exception as e2:
+                            print(f"Error creating credentials directly: {str(e2)}")
+                            raise ValueError("Could not load credentials from token file")
+                
                 print(f"Successfully loaded credentials from {token_path}")
+                print(f"Credential type: {type(creds)}")
+                print(f"Token valid: {creds.valid if creds else 'N/A'}")
+                print(f"Token expired: {creds.expired if creds else 'N/A'}")
+                print(f"Has refresh token: {'Yes' if creds and creds.refresh_token else 'No'}")
             except Exception as e:
                 print(f"Error loading credentials from {token_path}: {str(e)}")
+                # Try generating a readable version of the file to debug
+                try:
+                    with open(token_path, 'rb') as f:
+                        data = f.read()
+                    print(f"Token file size: {len(data)} bytes")
+                    print(f"First few bytes: {data[:20]}")
+                except Exception as e:
+                    print(f"Could not read token file: {str(e)}")
         else:
             print("No token file found in any of the expected locations")
         
@@ -93,21 +121,47 @@ class GoogleDriveManager:
                     creds = None
             else:
                 # Create OAuth flow from environment variables
-                client_config = {
-                    'web': {
-                        'client_id': self.client_id,
-                        'client_secret': self.client_secret,
-                        'redirect_uris': [self.redirect_uri, 'http://localhost:8080'],
-                        'auth_uri': 'https://accounts.google.com/o/oauth2/auth',
-                        'token_uri': 'https://oauth2.googleapis.com/token',
-                    }
-                }
+                client_config = self._create_client_config()
                 
                 # For server environment, this won't work without a browser
                 print("Authorization needed. Please generate token using auth_drive.py first.")
                 return None
                 
         return creds
+
+    def _create_client_config(self):
+        """Create OAuth client config from environment variables."""
+        client_id = os.environ.get('GOOGLE_CLIENT_ID')
+        client_secret = os.environ.get('GOOGLE_CLIENT_SECRET')
+        redirect_uri = os.environ.get('GOOGLE_REDIRECT_URI')
+        
+        if not client_id or not client_secret:
+            print("Missing OAuth credentials - check environment variables")
+            return None
+        
+        # Try both web and installed app formats
+        configs = [
+            {
+                'web': {
+                    'client_id': client_id,
+                    'client_secret': client_secret,
+                    'redirect_uris': [redirect_uri, 'http://localhost:8080'],
+                    'auth_uri': 'https://accounts.google.com/o/oauth2/auth',
+                    'token_uri': 'https://oauth2.googleapis.com/token',
+                }
+            },
+            {
+                'installed': {
+                    'client_id': client_id,
+                    'client_secret': client_secret,
+                    'redirect_uris': [redirect_uri, 'http://localhost:8080'],
+                    'auth_uri': 'https://accounts.google.com/o/oauth2/auth',
+                    'token_uri': 'https://oauth2.googleapis.com/token',
+                }
+            }
+        ]
+        
+        return configs
     
     def _save_credentials(self, creds):
         """Save credentials to all possible locations."""
