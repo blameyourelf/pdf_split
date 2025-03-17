@@ -454,10 +454,12 @@ def process_patient_data(info_lines):
 def get_ward_metadata():
     global wards_data
     # Try to load metadata from Google Drive
-    drive_metadata = drive_client.get_ward_metadata()
-    if drive_metadata:
-        print("Using ward metadata from Google Drive")
-        return drive_metadata
+    folder_id = os.environ.get('GOOGLE_DRIVE_FOLDER_ID', '')
+    if drive_client and folder_id:
+        drive_metadata = drive_client.get_ward_metadata(folder_id)
+        if drive_metadata:
+            print("Using ward metadata from Google Drive")
+            return drive_metadata
     
     # Fallback to local files
     print("Falling back to local PDF files")
