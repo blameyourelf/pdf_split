@@ -14,9 +14,9 @@ def process_ward_pdf(pdf_path):
     try:
         # Handle Google Drive file info dictionary
         if isinstance(pdf_path, dict):
-            from app import drive_manager
+            from app import drive_client
             if 'file_id' in pdf_path:
-                local_path = drive_manager.get_local_path(pdf_path['file_id'], pdf_path['filename'])
+                local_path = drive_client.get_local_path(pdf_path['file_id'], pdf_path['filename'])
                 if not local_path:
                     print(f"Failed to download file from Google Drive: {pdf_path['filename']}")
                     return {}
