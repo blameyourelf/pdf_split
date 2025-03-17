@@ -7,7 +7,6 @@ from datetime import datetime, timedelta
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
-from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 
 # Try to load dotenv if available
@@ -24,262 +23,137 @@ os.makedirs(CACHE_DIR, exist_ok=True)
 # Time to keep cached files (24 hours)
 CACHE_DURATION = timedelta(hours=24)
 
+import base64
+from googleapiclient.errors import HttpError
+import time
+import sys
+
+# Fix for circular import issue
+sys.modules['googleapiclient.discovery_cache'] = object()
+# Now import discovery after the fix
+from googleapiclient import discovery
+
 class GoogleDriveManager:
     """Google Drive integration for managing PDF files."""
     
     def __init__(self):
-        self.client_id = os.environ.get('GOOGLE_CLIENT_ID')
-        self.client_secret = os.environ.get('GOOGLE_CLIENT_SECRET')
-        self.redirect_uri = os.environ.get('GOOGLE_REDIRECT_URI')
-        self.folder_id = os.environ.get('GOOGLE_DRIVE_FOLDER_ID')
         self.drive_service = None
+        self.folder_id = os.environ.get('GOOGLE_DRIVE_FOLDER_ID', '')
+        self.token_path = os.path.join(os.path.dirname(__file__), 'token.pickle')
+        # Create alternate token path for containerized environments
+        self.alt_token_path = '/tmp/pdf_cache/token.pickle'
+        os.makedirs(os.path.dirname(self.alt_token_path), exist_ok=True)
         
-        # Check multiple locations for the token file
-        self.possible_token_paths = [
-            os.path.join(CACHE_DIR, 'token.pickle'),  # Default temp location
-            '/tmp/pdf_cache/token.pickle',  # Explicit Render location
-            os.path.join(os.path.dirname(os.path.abspath(__file__)), 'token.pickle')  # Project root
-        ]
-        
-        # Verify required environment variables
-        self._check_environment()
-
-    def _check_environment(self):
-        """Verify all required environment variables are set."""
-        missing = []
-        for var in ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'GOOGLE_DRIVE_FOLDER_ID']:
-            if not os.environ.get(var):
-                missing.append(var)
-        
-        if missing:
-            print(f"WARNING: Missing required environment variables: {', '.join(missing)}")
-            print("Google Drive integration may not function correctly.")
-    
-    def _find_token_file(self):
-        """Find the token file in any of the possible locations."""
-        for path in self.possible_token_paths:
-            if os.path.exists(path):
-                print(f"Found token file at: {path}")
-                return path
-        
-        print(f"No token file found. Searched in: {', '.join(self.possible_token_paths)}")
-        return None
-
-    def _get_credentials(self):
-        """Get valid credentials from token file or authorize."""
-        creds = None
-        
-        # Find token file
-        token_path = self._find_token_file()
-        if token_path:
+        # If environment has encoded token, decode it
+        encoded_token = os.environ.get('GOOGLE_TOKEN_BASE64')
+        if encoded_token:
             try:
-                with open(token_path, 'rb') as token:
-                    # Try different ways to decode the token
+                token_data = base64.b64decode(encoded_token)
+                # Write to both locations for maximum compatibility
+                with open(self.token_path, 'wb') as token_file:
+                    token_file.write(token_data)
+                with open(self.alt_token_path, 'wb') as token_file:
+                    token_file.write(token_data)
+                print(f"Decoded token saved to {self.token_path} and {self.alt_token_path}")
+            except Exception as e:
+                print(f"Error decoding token: {str(e)}")
+    
+    def initialize_service(self):
+        """Initialize Google Drive API service with robust error handling."""
+        try:
+            print("Initializing Google Drive service...")
+            creds = None
+            
+            # Try both token locations
+            token_locations = [self.token_path, self.alt_token_path]
+            for token_path in token_locations:
+                if os.path.exists(token_path):
+                    print(f"Found token file at: {token_path}")
                     try:
                         print(f"Loading token from {token_path} (standard way)")
-                        creds = pickle.load(token)
-                    except Exception as e1:
-                        print(f"Error loading token (standard way): {str(e1)}")
+                        with open(token_path, 'rb') as token:
+                            creds = pickle.load(token)
+                        print(f"Credential type: {type(creds)}")
+                        print(f"Token valid: {creds.valid}")
+                        print(f"Token expired: {creds.expired}")
+                        print(f"Has refresh token: {'Yes' if creds.refresh_token else 'No'}")
+                        if creds.valid:
+                            print("Successfully loaded credentials")
+                            break
+                    except Exception as e:
+                        print(f"Error loading token from {token_path}: {str(e)}")
+            
+            # If no valid credentials found, try to refresh or create new ones
+            if not creds or not creds.valid:
+                if creds and creds.expired and creds.refresh_token:
+                    print("Refreshing expired token")
+                    try:
+                        creds.refresh(Request())
+                        print("Token refreshed successfully")
+                    except Exception as e:
+                        print(f"Error refreshing token: {str(e)}")
+                        return False
+                else:
+                    # If no credentials or refresh failed, need new credentials
+                    print("No valid credentials found")
+                    return False
+            
+            # Create the Drive service with a timeout and error retries
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    self.drive_service = discovery.build(
+                        'drive', 'v3', 
+                        credentials=creds,
+                        cache_discovery=False
+                    )
+                    print("Google Drive service initialized successfully")
+                    
+                    # Save the updated token to both locations
+                    for token_path in token_locations:
                         try:
-                            # Reset file pointer
-                            token.seek(0)
-                            # Try direct Credentials creation
-                            print("Trying to create credentials directly from token data")
-                            token_data = json.load(token)
-                            creds = Credentials.from_authorized_user_info(token_data)
-                        except Exception as e2:
-                            print(f"Error creating credentials directly: {str(e2)}")
-                            raise ValueError("Could not load credentials from token file")
-                
-                print(f"Successfully loaded credentials from {token_path}")
-                print(f"Credential type: {type(creds)}")
-                print(f"Token valid: {creds.valid if creds else 'N/A'}")
-                print(f"Token expired: {creds.expired if creds else 'N/A'}")
-                print(f"Has refresh token: {'Yes' if creds and creds.refresh_token else 'No'}")
-            except Exception as e:
-                print(f"Error loading credentials from {token_path}: {str(e)}")
-                # Try generating a readable version of the file to debug
-                try:
-                    with open(token_path, 'rb') as f:
-                        data = f.read()
-                    print(f"Token file size: {len(data)} bytes")
-                    print(f"First few bytes: {data[:20]}")
+                            with open(token_path, 'wb') as token:
+                                pickle.dump(creds, token)
+                        except Exception as e:
+                            print(f"Warning: Could not save token to {token_path}: {str(e)}")
+                    
+                    return True
                 except Exception as e:
-                    print(f"Could not read token file: {str(e)}")
-        else:
-            print("No token file found in any of the expected locations")
-        
-        # If no valid credentials, let's create the flow
-        if not creds or not creds.valid:
-            if creds and creds.expired and creds.refresh_token:
-                try:
-                    creds.refresh(Request())
-                    # Save refreshed credentials
-                    self._save_credentials(creds)
-                except Exception as e:
-                    print(f"Error refreshing token: {str(e)}")
-                    creds = None
-            else:
-                # Create OAuth flow from environment variables
-                client_config = self._create_client_config()
+                    print(f"Attempt {attempt+1}/{max_retries} failed: {str(e)}")
+                    if attempt < max_retries - 1:
+                        time.sleep(1)  # Wait before retrying
+                    else:
+                        print(f"Error initializing Google Drive service: {str(e)}")
+                        return False
+            
+            return self.drive_service is not None
                 
-                # For server environment, this won't work without a browser
-                print("Authorization needed. Please generate token using auth_drive.py first.")
-                return None
-                
-        return creds
-
-    def _create_client_config(self):
-        """Create OAuth client config from environment variables."""
-        client_id = os.environ.get('GOOGLE_CLIENT_ID')
-        client_secret = os.environ.get('GOOGLE_CLIENT_SECRET')
-        redirect_uri = os.environ.get('GOOGLE_REDIRECT_URI')
-        
-        if not client_id or not client_secret:
-            print("Missing OAuth credentials - check environment variables")
-            return None
-        
-        # Try both web and installed app formats
-        configs = [
-            {
-                'web': {
-                    'client_id': client_id,
-                    'client_secret': client_secret,
-                    'redirect_uris': [redirect_uri, 'http://localhost:8080'],
-                    'auth_uri': 'https://accounts.google.com/o/oauth2/auth',
-                    'token_uri': 'https://oauth2.googleapis.com/token',
-                }
-            },
-            {
-                'installed': {
-                    'client_id': client_id,
-                    'client_secret': client_secret,
-                    'redirect_uris': [redirect_uri, 'http://localhost:8080'],
-                    'auth_uri': 'https://accounts.google.com/o/oauth2/auth',
-                    'token_uri': 'https://oauth2.googleapis.com/token',
-                }
-            }
-        ]
-        
-        return configs
-    
-    def _save_credentials(self, creds):
-        """Save credentials to all possible locations."""
-        for path in self.possible_token_paths:
-            try:
-                # Ensure directory exists
-                os.makedirs(os.path.dirname(path), exist_ok=True)
-                
-                with open(path, 'wb') as token:
-                    pickle.dump(creds, token)
-                print(f"Saved credentials to {path}")
-            except Exception as e:
-                print(f"Error saving credentials to {path}: {str(e)}")
-
-    def initialize_service(self):
-        """Initialize the Drive API service."""
-        try:
-            creds = self._get_credentials()
-            if not creds:
-                print("No valid credentials available. Run auth_drive.py first.")
-                return False
-                
-            self.drive_service = build('drive', 'v3', credentials=creds)
-            print("Google Drive service initialized successfully")
-            return True
         except Exception as e:
             print(f"Error initializing Google Drive service: {str(e)}")
+            import traceback
+            traceback.print_exc()
             return False
     
     def list_pdf_files(self):
-        """List all PDF files in the specified folder."""
+        """List all PDF files in the configured folder."""
         if not self.drive_service:
             if not self.initialize_service():
+                print("Failed to initialize Google Drive service")
                 return []
         
         try:
-            query = f"'{self.folder_id}' in parents and mimeType='application/pdf' and trashed=false"
-            response = self.drive_service.files().list(
+            query = f"'{self.folder_id}' in parents and mimeType='application/pdf'"
+            results = self.drive_service.files().list(
                 q=query,
-                spaces='drive',
-                fields='files(id, name, modifiedTime)'
+                fields="files(id, name, mimeType)",
+                pageSize=1000
             ).execute()
             
-            files = response.get('files', [])
-            print(f"Found {len(files)} PDF files in Google Drive folder")
+            files = results.get('files', [])
             return files
         except Exception as e:
             print(f"Error listing PDF files: {str(e)}")
             return []
-    
-    def get_file_info(self, file_id):
-        """Get metadata for a specific file."""
-        if not self.drive_service:
-            if not self.initialize_service():
-                return None
-        
-        try:
-            return self.drive_service.files().get(fileId=file_id).execute()
-        except Exception as e:
-            print(f"Error getting file info: {str(e)}")
-            return None
-    
-    def get_local_path(self, file_id, filename):
-        """Get the local path for a file, downloading it if necessary."""
-        cache_dir = "/tmp/pdf_cache"
-        os.makedirs(cache_dir, exist_ok=True)
-        
-        # Create a deterministic filename based on the file_id
-        local_path = os.path.join(cache_dir, f"{file_id}_{os.path.basename(filename)}")
-        
-        # Check if file already exists and is not empty
-        if os.path.exists(local_path) and os.path.getsize(local_path) > 0:
-            print(f"Using cached file: {local_path}")
-            return local_path
-        
-        # Need to download the file
-        try:
-            print(f"Downloading {filename} from Google Drive...")
-            if not self.initialize_service():
-                print("Failed to initialize Google Drive service")
-                return None
-                
-            request = self.drive_service.files().get_media(fileId=file_id)
-            
-            # Show progress while downloading
-            downloader = MediaIoBaseDownload(io.FileIO(local_path, 'wb'), request)
-            done = False
-            while not done:
-                status, done = downloader.next_chunk()
-                print(f"Download {int(status.progress() * 100)}%")
-                
-            print(f"File cached at {local_path}")
-            
-            # Verify the downloaded file
-            if os.path.exists(local_path) and os.path.getsize(local_path) > 0:
-                print(f"File size: {os.path.getsize(local_path) / 1024:.2f} KB")
-                # Try to open it to verify it's a valid PDF
-                try:
-                    import fitz
-                    with fitz.open(local_path) as test_pdf:
-                        page_count = len(test_pdf)
-                        print(f"Valid PDF with {page_count} pages")
-                except Exception as e:
-                    print(f"Downloaded file is not a valid PDF: {str(e)}")
-                    os.remove(local_path)
-                    return None
-                return local_path
-            else:
-                print(f"Downloaded file is empty or missing")
-                return None
-                
-        except Exception as e:
-            print(f"Error downloading file: {str(e)}")
-            import traceback
-            traceback.print_exc()
-            if os.path.exists(local_path):
-                os.remove(local_path)
-            return None
     
     def get_ward_metadata(self):
         """Get metadata for all ward PDF files."""
@@ -306,7 +180,6 @@ class GoogleDriveManager:
             if filename.startswith('ward_') and filename.endswith('_records.pdf'):
                 # Extract ward name/number between 'ward_' and '_records.pdf'
                 ward_part = filename[5:-12]  # Remove 'ward_' and '_records.pdf'
-                
                 print(f"Extracted ward part: {ward_part}")
                 
                 # For numbered wards that use Long_X format
@@ -328,7 +201,7 @@ class GoogleDriveManager:
         
         if not wards_meta:
             print("No ward PDF files found in Google Drive folder")
-            
+        
         # Sort wards
         sorted_ward_nums = sorted(wards_meta.keys(), key=lambda x: wards_meta[x]["display_name"].lower())
         sorted_wards_meta = {}
@@ -336,3 +209,49 @@ class GoogleDriveManager:
             sorted_wards_meta[ward_num] = wards_meta[ward_num]
         
         return sorted_wards_meta
+
+    def get_local_path(self, file_id, filename):
+        """Get the local path for a file, downloading it if necessary."""
+        cache_dir = "/tmp/pdf_cache"
+        os.makedirs(cache_dir, exist_ok=True)
+        
+        # Create a deterministic filename based on the file_id
+        local_path = os.path.join(cache_dir, f"{file_id}_{os.path.basename(filename)}")
+        
+        # Check if file already exists and is not empty
+        if os.path.exists(local_path) and os.path.getsize(local_path) > 0:
+            print(f"Using cached file: {local_path}")
+            return local_path
+        
+        # Need to download the file
+        try:
+            print(f"Downloading {filename} from Google Drive...")
+            if not self.drive_service and not self.initialize_service():
+                print("Failed to initialize Google Drive service")
+                return None
+            
+            request = self.drive_service.files().get_media(fileId=file_id)
+            
+            with open(local_path, 'wb') as f:
+                downloader = MediaIoBaseDownload(f, request)
+                done = False
+                while not done:
+                    status, done = downloader.next_chunk()
+                    print(f"Download {int(status.progress() * 100)}%")
+            
+            print(f"File cached at {local_path}")
+            
+            # Verify the downloaded file
+            if os.path.exists(local_path) and os.path.getsize(local_path) > 0:
+                return local_path
+            else:
+                print(f"Downloaded file is empty or missing")
+                return None
+                
+        except Exception as e:
+            print(f"Error downloading file: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            if os.path.exists(local_path):
+                os.remove(local_path)
+            return None

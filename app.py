@@ -547,59 +547,76 @@ def load_specific_ward(ward_num):
     global wards_data
     print(f"Loading specific ward: {ward_num}")
     
+    # Make sure we're working with a valid ward
+    if ward_num not in wards_data:
+        print(f"Ward {ward_num} not found in ward data")
+        return False
+        
+    ward_info = wards_data[ward_num]
+    print(f"Found ward in wards_data: {ward_num}")
+    
+    # Skip if patients already loaded
+    if ward_info.get("patients") and len(ward_info["patients"]) > 0:
+        print(f"Ward {ward_num} already has {len(ward_info['patients'])} patients loaded")
+        return True
+    
     # Clear cache to ensure fresh data
+    from pdf_processor import process_ward_pdf
     process_ward_pdf.cache_clear()
     
-    if ward_num in wards_data:
-        ward_info = wards_data[ward_num]
-        print(f"Found ward in wards_data: {ward_num}")
-        
-        # Handle Google Drive file if available
+    # Handle files based on their source (Google Drive vs Local)
+    try:
         if "file_id" in ward_info:
-            print(f"Using Google Drive file for ward: {ward_num}")
+            # Google Drive file
             file_id = ward_info["file_id"]
             filename = ward_info["filename"]
+            print(f"Loading Google Drive file: {filename} (ID: {file_id})")
             
-            # Download the file to a local cache if needed
+            # Get local file path
+            from google_drive import GoogleDriveManager
+            if not drive_manager or not drive_manager.drive_service:
+                # Re-initialize if needed
+                global drive_manager
+                drive_manager = GoogleDriveManager()
+                drive_manager.initialize_service()
+                
             local_path = drive_manager.get_local_path(file_id, filename)
-            
             if local_path and os.path.exists(local_path):
-                print(f"Processing PDF from cached location: {local_path}")
-                try:
-                    patient_data = process_ward_pdf(local_path)
-                    if not patient_data:
-                        print(f"No patient data found in {local_path}")
-                        patient_data = {}
-                    else:
-                        print(f"Found {len(patient_data)} patients in {local_path}")
-                except Exception as e:
-                    print(f"Error processing ward PDF: {str(e)}")
+                print(f"Processing PDF from local path: {local_path}")
+                patient_data = process_ward_pdf(local_path)
+                if not patient_data:
+                    print(f"No patients found in {local_path}")
                     patient_data = {}
+                else:
+                    print(f"Found {len(patient_data)} patients in {local_path}")
             else:
-                print(f"Failed to get local path for file_id: {file_id}")
+                print(f"Failed to get local path for file {filename}")
                 patient_data = {}
         else:
-            # Local file mode
+            # Local file
             pdf_filename = ward_info["filename"]
-            print(f"Using local file for ward: {ward_num}")
+            print(f"Loading local file: {pdf_filename}")
             
             if os.path.exists(pdf_filename):
-                try:
-                    patient_data = process_ward_pdf(pdf_filename)
-                    print(f"Found {len(patient_data)} patients in {pdf_filename}")
-                except Exception as e:
-                    print(f"Error processing ward PDF: {str(e)}")
+                patient_data = process_ward_pdf(pdf_filename)
+                if not patient_data:
+                    print(f"No patients found in {pdf_filename}")
                     patient_data = {}
+                else:
+                    print(f"Found {len(patient_data)} patients in {pdf_filename}")
             else:
                 print(f"PDF file not found: {pdf_filename}")
                 patient_data = {}
-        
-        # Update the patients data in the ward info
+                
+        # Update the ward data
         wards_data[ward_num]["patients"] = patient_data
-        print(f"Loaded {len(patient_data)} patients for ward: {ward_num}")
-        return True
-    else:
-        print(f"Ward not found in ward data: {ward_num}")
+        print(f"Updated ward {ward_num} with {len(patient_data)} patients")
+        return len(patient_data) > 0
+        
+    except Exception as e:
+        print(f"Error loading ward {ward_num}: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return False
 
 def load_ward_data_background():
@@ -873,9 +890,15 @@ def ward(ward_num):
     if ward_num.lower().startswith('ward '):
         normalized_ward = ward_num[5:].strip()  # Remove 'ward ' prefix
     
-    # Check if ward data is empty and needs to be reloaded
+    # Reload ward metadata if empty
     if not wards_data:
         print("Ward data is empty, reloading metadata...")
+        # Initialize drive manager again if needed
+        global drive_manager
+        if not drive_manager:
+            drive_manager = GoogleDriveManager()
+            drive_manager.initialize_service()
+            
         metadata = get_ward_metadata()
         if metadata:
             wards_data.clear()
@@ -885,54 +908,65 @@ def ward(ward_num):
     # If still not found, try reloading one last time
     if normalized_ward not in wards_data:
         print(f"Ward {normalized_ward} not found, forcing metadata reload...")
+        # Try one more time with fresh GoogleDriveManager
+        drive_manager = GoogleDriveManager()
+        drive_manager.initialize_service()
         metadata = get_ward_metadata()
         if metadata:
             wards_data.clear()
             wards_data.update(metadata)
+            print(f"Reloaded metadata with {len(wards_data)} wards")
     
-    # Load this specific ward's data on demand
+    # Try loading the ward data
     try:
-        success = load_specific_ward(normalized_ward)
-        print(f"Successfully loaded ward data for: {normalized_ward}, Success: {success}")
-        
-        # Add debug info about the loaded patients
-        if normalized_ward in wards_data and wards_data[normalized_ward].get("patients"):
-            print(f"Patients in ward {normalized_ward}: {len(wards_data[normalized_ward]['patients'])}")
-            # Print a few patient IDs for debugging
-            patient_ids = list(wards_data[normalized_ward]["patients"].keys())[:5]
-            print(f"Sample patient IDs: {patient_ids}")
+        if normalized_ward in wards_data:
+            success = load_specific_ward(normalized_ward)
+            print(f"Load ward data result: {success}")
+            
+            # Debug output
+            if normalized_ward in wards_data:
+                patients = wards_data[normalized_ward].get("patients", {})
+                patient_count = len(patients)
+                print(f"Ward {normalized_ward} has {patient_count} patients")
+                if patient_count > 0:
+                    sample_ids = list(patients.keys())[:3]
+                    print(f"Sample patient IDs: {sample_ids}")
         else:
-            print(f"No patients loaded for ward {normalized_ward}")
+            print(f"Ward {normalized_ward} not found in available wards")
     except Exception as e:
         print(f"Error loading ward data: {str(e)}")
         import traceback
         traceback.print_exc()
     
+    # Add audit log entry
     log_access('view_ward', f'Ward {normalized_ward}')
     
+    # Check if ward exists after all loading attempts
     if normalized_ward not in wards_data:
         print(f"Ward not found in wards_data: {normalized_ward}")
         print(f"Available wards: {list(wards_data.keys())}")
         flash("Ward not found", "error")
         return redirect(url_for('index'))
-        
+    
+    # Get ward info
     ward_info = wards_data[normalized_ward]
     
-    # Get PDF creation (modification) time
+    # Get PDF creation time (file modification time)
     pdf_creation_time = "Unknown"
-    
-    # Different handling for Google Drive vs local files
-    if ward_info.get("file_id"):
-        # Google Drive file
-        try:
+    try:
+        if "file_id" in ward_info:
             file_id = ward_info["file_id"]
             local_path = drive_manager.get_local_path(file_id, ward_info["filename"])
             if local_path and os.path.exists(local_path):
                 pdf_mtime = os.path.getmtime(local_path)
                 pdf_creation_time = datetime.fromtimestamp(pdf_mtime).strftime("%Y-%m-%d %H:%M:%S")
-        except Exception as e:
-            print(f"Error getting file info: {str(e)}")
+        elif os.path.exists(ward_info["filename"]):
+            pdf_mtime = os.path.getmtime(ward_info["filename"])
+            pdf_creation_time = datetime.fromtimestamp(pdf_mtime).strftime("%Y-%m-%d %H:%M:%S")
+    except Exception as e:
+        print(f"Error getting file info: {str(e)}")
     
+    # Render the ward template
     return render_template('ward.html', 
                          ward_num=normalized_ward,
                          ward_data={"patients": ward_info.get("patients", {})},
