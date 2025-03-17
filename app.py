@@ -840,7 +840,6 @@ def ward(ward_num):
     # Check if we need to load ward data
     if normalized_ward not in wards_data:
         # Try reloading ward metadata
-        global wards_data
         wards_data = get_ward_metadata()
     
     # Load this specific ward's data on demand
