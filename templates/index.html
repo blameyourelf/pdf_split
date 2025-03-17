@@ -340,7 +340,7 @@
 
         <div class="ward-grid">
             {% for ward_num, ward_info in wards.items() %}
-            <a href="/ward/{{ ward_num }}" class="ward-card" data-ward="{{ ward_num }}">
+            <a href="{{ url_for('ward', ward_num=ward_num) | replace('%20', ' ') }}" class="ward-card" data-ward="{{ ward_num }}">
                 <div class="ward-icon">
                     <i class="fas fa-hospital-user"></i>
                 </div>

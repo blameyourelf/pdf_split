@@ -832,21 +832,33 @@ def ward(ward_num):
     print(f"Accessing ward: {ward_num}")
     print(f"Available wards: {list(wards_data.keys())}")
     
+    # Normalize ward number/name
+    normalized_ward = ward_num
+    if ward_num.lower().startswith('ward '):
+        normalized_ward = ward_num[5:].strip()  # Remove 'ward ' prefix
+    
+    # Check if we need to load ward data
+    if normalized_ward not in wards_data:
+        # Try reloading ward metadata
+        global wards_data
+        wards_data = get_ward_metadata()
+    
     # Load this specific ward's data on demand
     try:
-        load_specific_ward(ward_num)
-        print(f"Successfully loaded ward data for: {ward_num}")
+        load_specific_ward(normalized_ward)
+        print(f"Successfully loaded ward data for: {normalized_ward}")
     except Exception as e:
         print(f"Error loading ward data: {str(e)}")
     
-    log_access('view_ward', f'Ward {ward_num}')
+    log_access('view_ward', f'Ward {normalized_ward}')
     
-    if ward_num not in wards_data:
-        print(f"Ward not found in wards_data: {ward_num}")
+    if normalized_ward not in wards_data:
+        print(f"Ward not found in wards_data: {normalized_ward}")
+        print(f"Available wards: {list(wards_data.keys())}")
         flash("Ward not found", "error")
         return redirect(url_for('index'))
         
-    ward_info = wards_data[ward_num]
+    ward_info = wards_data[normalized_ward]
     
     # Get PDF creation (modification) time
     pdf_creation_time = "Unknown"
@@ -854,32 +866,21 @@ def ward(ward_num):
     # Different handling for Google Drive vs local files
     if ward_info.get("file_id"):
         # Google Drive file
-        file_id = ward_info.get("file_id")
-        local_path = drive_manager.get_local_path(file_id, ward_info["filename"])
-        if local_path and os.path.exists(local_path):
-            pdf_mtime = os.path.getmtime(local_path)
-            pdf_creation_time = datetime.fromtimestamp(pdf_mtime).strftime("%Y-%m-%d %H:%M:%S")
-    else:
-        # Local file
-        filename = ward_info["filename"]
-        if os.path.exists(filename):
-            pdf_mtime = os.path.getmtime(filename)
-            pdf_creation_time = datetime.fromtimestamp(pdf_mtime).strftime("%Y-%m-%d %H:%M:%S")
+        try:
+            file_id = ward_info["file_id"]
+            local_path = drive_manager.get_local_path(file_id, ward_info["filename"])
+            if local_path and os.path.exists(local_path):
+                pdf_mtime = os.path.getmtime(local_path)
+                pdf_creation_time = datetime.fromtimestamp(pdf_mtime).strftime("%Y-%m-%d %H:%M:%S")
+        except Exception as e:
+            print(f"Error getting file info: {str(e)}")
     
-    patient_list = []
-    if ward_info.get("patients"):
-        # Create a simple list of patients for the template
-        for pid, data in ward_info["patients"].items():
-            patient_list.append({
-                "id": pid,
-                "name": data.get("name", "Unknown")
-            })
-            
     return render_template('ward.html', 
-                          ward_num=ward_num,
-                          ward_data={"patients": ward_info.get("patients", {})},
-                          pdf_filename=ward_info["filename"],
-                          pdf_creation_time=pdf_creation_time)
+                         ward_num=normalized_ward,
+                         ward_data={"patients": ward_info.get("patients", {})},
+                         pdf_filename=ward_info["filename"],
+                         pdf_creation_time=pdf_creation_time,
+                         display_name=ward_info.get("display_name", normalized_ward))
 
 @app.route('/search_ward/<ward_num>')
 @login_required

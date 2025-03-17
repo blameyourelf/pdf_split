@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Ward {{ ward_num }} - Patient Records{% endblock %}
+{% block title %}{{ display_name }} - Patient Records{% endblock %}
 
 {% block extra_styles %}
 <style>
@@ -93,13 +93,7 @@
 <div class="container">
     <div class="ward-header">
         <div>
-            <h1 class="title">
-                {% if ward_num.isdigit() %}
-                    Ward {{ ward_num }}
-                {% else %}
-                    {{ ward_num }}
-                {% endif %}
-            </h1>
+            <h1 class="title">{{ display_name }}</h1>
             <p class="subtitle">{{ pdf_filename }}</p>
             <p class="subtitle" style="font-size: 0.9rem; color: #718096;">
                 Snapshot taken at: {{ pdf_creation_time }}
