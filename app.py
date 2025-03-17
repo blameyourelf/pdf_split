@@ -251,10 +251,8 @@ def log_access(action, patient_id=None):
     except Exception as e:
         print(f"Error in log_access: {str(e)}")
 
-# Dictionary to store ward data
+# Initialize global variables
 wards_data = {}
-
-# Flag to indicate if data is being loaded
 is_loading_data = False
 
 def extract_patient_info(pdf_path, patient_id=None):
@@ -452,6 +450,7 @@ def process_patient_data(info_lines):
 
 # Get ward metadata without processing patient data
 def get_ward_metadata():
+    global wards_data
     # Try to load metadata from Google Drive
     drive_metadata = drive_manager.get_ward_metadata()
     if drive_metadata:
@@ -543,8 +542,8 @@ def process_ward_pdf(pdf_filename):
 # Load a specific ward's data
 def load_specific_ward(ward_num):
     """Load a specific ward's data."""
-    print(f"Loading specific ward: {ward_num}")
     global wards_data
+    print(f"Loading specific ward: {ward_num}")
     
     # Clear cache to ensure fresh data
     process_ward_pdf.cache_clear()
@@ -826,6 +825,7 @@ def profile():
 @app.route('/ward/<ward_num>')
 @login_required
 def ward(ward_num):
+    global wards_data
     # URL decode the ward_num to handle special characters
     ward_num = unquote(ward_num)
     
