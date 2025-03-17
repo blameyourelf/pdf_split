@@ -1,11 +1,12 @@
+import os
+import threading
+from urllib.parse import unquote
 from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, session, make_response
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from PyPDF2 import PdfReader
 from flask_wtf.csrf import CSRFProtect
-import os
-import threading
 import click
 from datetime import datetime, timedelta
 from sqlalchemy import create_engine
@@ -68,6 +69,11 @@ from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 import subprocess
 from datetime import datetime
+
+# Define global variables at module level before any functions
+wards_data = {}
+is_loading_data = False
+PDF_DIRECTORY = os.path.join(os.getcwd(), 'pdfs')
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-super-secret-key-8712'  # Change this in production
@@ -250,10 +256,6 @@ def log_access(action, patient_id=None):
                 print(f"Error logging audit entry: {str(e)}")
     except Exception as e:
         print(f"Error in log_access: {str(e)}")
-
-# Initialize global variables
-wards_data = {}
-is_loading_data = False
 
 def extract_patient_info(pdf_path, patient_id=None):
     """Extract patient info and notes while supporting multiple note formats"""
@@ -588,16 +590,27 @@ def load_ward_data_background():
         print("Could not initialize Google Drive, using local files")
 
     # Load ward metadata (either from Drive or locally)
-    wards_data = get_ward_metadata()
+    metadata = get_ward_metadata()
+    if metadata:
+        # Explicitly update the global variable with retrieved data
+        wards_data.clear()
+        wards_data.update(metadata)
+        print(f"Loaded metadata for {len(wards_data)} wards")
+    else:
+        print("Warning: Failed to load any ward metadata")
     is_loading_data = False
-    print(f"Loaded metadata for {len(wards_data)} wards")
 
 # Start with just the metadata
 def init_ward_data():
-    global wards_data, is_loading_data
+    global is_loading_data
     is_loading_data = True
     threading.Thread(target=load_ward_data_background).start()
-    is_loading_data = False
+
+# Add an improved initialization approach
+@app.before_first_request
+def before_first_request():
+    """Initialize data before first request."""
+    init_ward_data()
 
 # Initialize with metadata
 init_ward_data()
@@ -825,6 +838,7 @@ def profile():
 @app.route('/ward/<ward_num>')
 @login_required
 def ward(ward_num):
+    """Ward view route handler"""
     global wards_data
     # URL decode the ward_num to handle special characters
     ward_num = unquote(ward_num)
@@ -837,10 +851,22 @@ def ward(ward_num):
     if ward_num.lower().startswith('ward '):
         normalized_ward = ward_num[5:].strip()  # Remove 'ward ' prefix
     
-    # Check if we need to load ward data
+    # Check if we need to reload ward data (if empty)
+    if not wards_data:
+        print("Ward data is empty, reloading metadata...")
+        metadata = get_ward_metadata()
+        if metadata:
+            wards_data.clear()
+            wards_data.update(metadata)
+            print(f"Reloaded metadata with {len(wards_data)} wards")
+    
+    # If still not found, try reloading one last time
     if normalized_ward not in wards_data:
-        # Try reloading ward metadata
-        wards_data = get_ward_metadata()
+        print(f"Ward {normalized_ward} not found, forcing metadata reload...")
+        metadata = get_ward_metadata()
+        if metadata:
+            wards_data.clear()
+            wards_data.update(metadata)
     
     # Load this specific ward's data on demand
     try:
