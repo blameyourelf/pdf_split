@@ -560,19 +560,41 @@ def load_specific_ward(ward_num):
             file_id = ward_info["file_id"]
             filename = ward_info["filename"]
             
-            # Pass the ward info dict directly to process_ward_pdf
-            patient_data = process_ward_pdf(ward_info)
+            # Download the file to a local cache if needed
+            local_path = drive_manager.get_local_path(file_id, filename)
+            
+            if local_path and os.path.exists(local_path):
+                print(f"Processing PDF from cached location: {local_path}")
+                try:
+                    patient_data = process_ward_pdf(local_path)
+                    if not patient_data:
+                        print(f"No patient data found in {local_path}")
+                        patient_data = {}
+                    else:
+                        print(f"Found {len(patient_data)} patients in {local_path}")
+                except Exception as e:
+                    print(f"Error processing ward PDF: {str(e)}")
+                    patient_data = {}
+            else:
+                print(f"Failed to get local path for file_id: {file_id}")
+                patient_data = {}
         else:
             # Local file mode
             pdf_filename = ward_info["filename"]
             print(f"Using local file for ward: {ward_num}")
             
             if os.path.exists(pdf_filename):
-                patient_data = process_ward_pdf(pdf_filename)
+                try:
+                    patient_data = process_ward_pdf(pdf_filename)
+                    print(f"Found {len(patient_data)} patients in {pdf_filename}")
+                except Exception as e:
+                    print(f"Error processing ward PDF: {str(e)}")
+                    patient_data = {}
             else:
                 print(f"PDF file not found: {pdf_filename}")
                 patient_data = {}
         
+        # Update the patients data in the ward info
         wards_data[ward_num]["patients"] = patient_data
         print(f"Loaded {len(patient_data)} patients for ward: {ward_num}")
         return True
@@ -851,7 +873,7 @@ def ward(ward_num):
     if ward_num.lower().startswith('ward '):
         normalized_ward = ward_num[5:].strip()  # Remove 'ward ' prefix
     
-    # Check if we need to reload ward data (if empty)
+    # Check if ward data is empty and needs to be reloaded
     if not wards_data:
         print("Ward data is empty, reloading metadata...")
         metadata = get_ward_metadata()
@@ -870,10 +892,21 @@ def ward(ward_num):
     
     # Load this specific ward's data on demand
     try:
-        load_specific_ward(normalized_ward)
-        print(f"Successfully loaded ward data for: {normalized_ward}")
+        success = load_specific_ward(normalized_ward)
+        print(f"Successfully loaded ward data for: {normalized_ward}, Success: {success}")
+        
+        # Add debug info about the loaded patients
+        if normalized_ward in wards_data and wards_data[normalized_ward].get("patients"):
+            print(f"Patients in ward {normalized_ward}: {len(wards_data[normalized_ward]['patients'])}")
+            # Print a few patient IDs for debugging
+            patient_ids = list(wards_data[normalized_ward]["patients"].keys())[:5]
+            print(f"Sample patient IDs: {patient_ids}")
+        else:
+            print(f"No patients loaded for ward {normalized_ward}")
     except Exception as e:
         print(f"Error loading ward data: {str(e)}")
+        import traceback
+        traceback.print_exc()
     
     log_access('view_ward', f'Ward {normalized_ward}')
     

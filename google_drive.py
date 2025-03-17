@@ -225,39 +225,60 @@ class GoogleDriveManager:
             return None
     
     def get_local_path(self, file_id, filename):
-        """Get path to cached file or download if not cached."""
-        cached_path = os.path.join(CACHE_DIR, f"{file_id}_{filename}")
+        """Get the local path for a file, downloading it if necessary."""
+        cache_dir = "/tmp/pdf_cache"
+        os.makedirs(cache_dir, exist_ok=True)
         
-        # Check if file exists in cache and is recent enough
-        if os.path.exists(cached_path):
-            file_time = datetime.fromtimestamp(os.path.getmtime(cached_path))
-            if datetime.now() - file_time < CACHE_DURATION:
-                return cached_path
+        # Create a deterministic filename based on the file_id
+        local_path = os.path.join(cache_dir, f"{file_id}_{os.path.basename(filename)}")
         
-        # Download file if not in cache or too old
-        if not self.drive_service:
-            if not self.initialize_service():
-                return None
+        # Check if file already exists and is not empty
+        if os.path.exists(local_path) and os.path.getsize(local_path) > 0:
+            print(f"Using cached file: {local_path}")
+            return local_path
         
+        # Need to download the file
         try:
-            request = self.drive_service.files().get_media(fileId=file_id)
-            file_content = io.BytesIO()
-            downloader = MediaIoBaseDownload(file_content, request)
-            
             print(f"Downloading {filename} from Google Drive...")
+            if not self.initialize_service():
+                print("Failed to initialize Google Drive service")
+                return None
+                
+            request = self.drive_service.files().get_media(fileId=file_id)
+            
+            # Show progress while downloading
+            downloader = MediaIoBaseDownload(io.FileIO(local_path, 'wb'), request)
             done = False
             while not done:
                 status, done = downloader.next_chunk()
                 print(f"Download {int(status.progress() * 100)}%")
+                
+            print(f"File cached at {local_path}")
             
-            # Save to cache
-            with open(cached_path, 'wb') as f:
-                f.write(file_content.getvalue())
-            
-            print(f"File cached at {cached_path}")
-            return cached_path
+            # Verify the downloaded file
+            if os.path.exists(local_path) and os.path.getsize(local_path) > 0:
+                print(f"File size: {os.path.getsize(local_path) / 1024:.2f} KB")
+                # Try to open it to verify it's a valid PDF
+                try:
+                    import fitz
+                    with fitz.open(local_path) as test_pdf:
+                        page_count = len(test_pdf)
+                        print(f"Valid PDF with {page_count} pages")
+                except Exception as e:
+                    print(f"Downloaded file is not a valid PDF: {str(e)}")
+                    os.remove(local_path)
+                    return None
+                return local_path
+            else:
+                print(f"Downloaded file is empty or missing")
+                return None
+                
         except Exception as e:
-            print(f"Error downloading file {filename}: {str(e)}")
+            print(f"Error downloading file: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            if os.path.exists(local_path):
+                os.remove(local_path)
             return None
     
     def get_ward_metadata(self):
