@@ -1,6 +1,7 @@
 #!/bin/bash
 
-echo "Starting application on Render..."
+echo "===== Starting application on Render ====="
+echo "Date: $(date)"
 
 # Setup token directory
 TOKEN_DIR="/tmp/pdf_cache"
@@ -19,6 +20,11 @@ echo "Checking environment variables..."
 [ -n "$GOOGLE_DRIVE_FOLDER_ID" ] && echo "✓ GOOGLE_DRIVE_FOLDER_ID is set" || echo "✗ GOOGLE_DRIVE_FOLDER_ID is not set"
 [ -n "$GOOGLE_TOKEN_BASE64" ] && echo "✓ GOOGLE_TOKEN_BASE64 is set" || echo "✗ GOOGLE_TOKEN_BASE64 is not set"
 
+# Check for Python and pip
+echo "Checking Python installation..."
+which python && python --version
+which pip && pip --version
+
 # If we have a base64-encoded token in an environment variable, decode it
 if [ -n "$GOOGLE_TOKEN_BASE64" ]; then
     echo "Found base64-encoded token, decoding to $TOKEN_PATH"
@@ -35,7 +41,9 @@ fi
 
 # Create PDF directory if it doesn't exist
 mkdir -p ./pdf_files
+echo "Created PDF directory"
 
 # Start the application with Gunicorn
 echo "Starting Gunicorn server..."
-gunicorn --workers 2 --bind 0.0.0.0:$PORT --timeout 120 wsgi:app
+export PYTHONUNBUFFERED=1
+exec gunicorn --workers 2 --log-level debug --bind 0.0.0.0:$PORT --timeout 120 wsgi:application

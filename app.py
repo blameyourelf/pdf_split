@@ -16,6 +16,7 @@ from urllib.parse import quote, unquote
 from flask.cli import with_appcontext
 import io
 import csv
+import tempfile  # Add this import
 from datetime import datetime, timedelta
 from flask import (Flask, render_template, request, jsonify, redirect, 
                   url_for, flash, session, make_response, send_file)

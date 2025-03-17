@@ -2,7 +2,7 @@ services:
   - type: web
     name: pdf-split-app
     env: python
-    buildCommand: pip install -r requirements.txt
+    buildCommand: pip install -r requirements.txt && chmod +x start_render.sh
     startCommand: ./start_render.sh
     envVars:
       - key: SECRET_KEY
@@ -21,3 +21,5 @@ services:
         sync: false
       - key: GOOGLE_TOKEN_BASE64
         sync: false
+      - key: PYTHONUNBUFFERED
+        value: "1"
