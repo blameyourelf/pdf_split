@@ -1475,6 +1475,101 @@ def search_ward_patients(ward_id):
     
     return jsonify(results)
 
+@app.route('/admin/users')
+@login_required
+def admin_users():
+    """Admin page for user management - allows adding users and resetting passwords"""
+    # Only admins can access this page
+    if current_user.role != 'admin':
+        flash('Access denied')
+        return redirect(url_for('index'))
+    
+    # Get all users
+    users = User.query.order_by(User.username).all()
+    
+    return render_template('admin_users.html', users=users)
+
+@app.route('/admin/add_user', methods=['POST'])
+@login_required
+def admin_add_user():
+    """Handle adding a new user"""
+    # Only admins can access this function
+    if current_user.role != 'admin':
+        flash('Access denied')
+        return redirect(url_for('index'))
+    
+    username = request.form.get('username')
+    password = request.form.get('password')
+    role = request.form.get('role')
+    
+    # Basic validation
+    if not username or not password:
+        flash('Username and password are required', 'danger')
+        return redirect(url_for('admin_users'))
+    
+    # Check if user already exists
+    existing_user = User.query.filter_by(username=username).first()
+    if existing_user:
+        flash(f'User "{username}" already exists', 'warning')
+        return redirect(url_for('admin_users'))
+    
+    # Create new user
+    new_user = User(
+        username=username,
+        password_hash=generate_password_hash(password),
+        role=role
+    )
+    
+    try:
+        db.session.add(new_user)
+        db.session.commit()
+        flash(f'User "{username}" created successfully', 'success')
+        
+        # Log this action
+        log_access('create_user', f'Created user: {username}')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error creating user: {str(e)}', 'danger')
+    
+    return redirect(url_for('admin_users'))
+
+@app.route('/admin/reset_password', methods=['POST'])
+@login_required
+def admin_reset_password():
+    """Handle resetting a user's password"""
+    # Only admins can access this function
+    if current_user.role != 'admin':
+        flash('Access denied')
+        return redirect(url_for('index'))
+    
+    user_id = request.form.get('user_id')
+    new_password = request.form.get('new_password')
+    
+    # Basic validation
+    if not user_id or not new_password:
+        flash('User ID and new password are required', 'danger')
+        return redirect(url_for('admin_users'))
+    
+    # Find the user
+    user = User.query.get(user_id)
+    if not user:
+        flash('User not found', 'danger')
+        return redirect(url_for('admin_users'))
+    
+    # Update password
+    try:
+        user.password_hash = generate_password_hash(new_password)
+        db.session.commit()
+        flash(f'Password reset successful for user "{user.username}"', 'success')
+        
+        # Log this action
+        log_access('reset_password', f'Reset password for user: {user.username}')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error resetting password: {str(e)}', 'danger')
+    
+    return redirect(url_for('admin_users'))
+
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()

@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Management - Contingency EPR</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.9.3/css/bulma.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            padding: 20px;
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        .title {
+            color: #1a365d;
+            font-weight: 700;
+            font-size: 2rem;
+            margin-bottom: 1rem;
+        }
+        .subtitle {
+            color: #4a5568;
+            margin-bottom: 2rem;
+            font-size: 1.1rem;
+        }
+        .back-button {
+            margin-bottom: 2rem;
+        }
+        .panel {
+            background: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+            margin-bottom: 2rem;
+        }
+        .panel-title {
+            font-weight: 600;
+            font-size: 1.1rem;
+            margin-bottom: 1rem;
+            color: #2d3748;
+        }
+        .users-table {
+            width: 100%;
+        }
+        .users-table th {
+            background-color: #f7fafc;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="columns is-mobile">
+            <div class="column">
+                <a href="/" class="button is-light back-button">
+                    <span class="icon">
+                        <i class="fas fa-arrow-left"></i>
+                    </span>
+                    <span>Back to Home</span>
+                </a>
+            </div>
+        </div>
+
+        <h1 class="title">User Management</h1>
+        <p class="subtitle">Add users and reset passwords</p>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="notification is-{{ category if category != 'message' else 'info' }}">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <!-- Add New User Panel -->
+        <div class="panel">
+            <h3 class="panel-title"><i class="fas fa-user-plus"></i> Add New User</h3>
+            <form method="POST" action="{{ url_for('admin_add_user') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="columns is-multiline">
+                    <div class="column is-4">
+                        <div class="field">
+                            <label class="label">Username</label>
+                            <div class="control has-icons-left">
+                                <input class="input" type="text" name="username" placeholder="Enter username" required>
+                                <span class="icon is-small is-left">
+                                    <i class="fas fa-user"></i>
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="column is-4">
+                        <div class="field">
+                            <label class="label">Password</label>
+                            <div class="control has-icons-left">
+                                <input class="input" type="password" name="password" placeholder="Enter password" required>
+                                <span class="icon is-small is-left">
+                                    <i class="fas fa-lock"></i>
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="column is-4">
+                        <div class="field">
+                            <label class="label">Role</label>
+                            <div class="control">
+                                <div class="select is-fullwidth">
+                                    <select name="role">
+                                        <option value="user">Regular User</option>
+                                        <option value="admin">Administrator</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="field">
+                    <div class="control">
+                        <button type="submit" class="button is-primary">
+                            <span class="icon">
+                                <i class="fas fa-plus"></i>
+                            </span>
+                            <span>Add User</span>
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <!-- User List & Reset Password Panel -->
+        <div class="panel">
+            <h3 class="panel-title"><i class="fas fa-users"></i> Existing Users</h3>
+            {% if users %}
+                <table class="table users-table is-fullwidth">
+                    <thead>
+                        <tr>
+                            <th>Username</th>
+                            <th>Role</th>
+                            <th>Default Ward</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for user in users %}
+                            <tr>
+                                <td>{{ user.username }}</td>
+                                <td>
+                                    <span class="tag {% if user.role == 'admin' %}is-danger{% else %}is-info{% endif %}">
+                                        {{ user.role }}
+                                    </span>
+                                </td>
+                                <td>{{ user.default_ward or 'None' }}</td>
+                                <td>
+                                    <button class="button is-small" 
+                                            onclick="showResetPasswordModal('{{ user.username }}', {{ user.id }})">
+                                        <span class="icon is-small">
+                                            <i class="fas fa-key"></i>
+                                        </span>
+                                        <span>Reset Password</span>
+                                    </button>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                <div class="notification is-info is-light">
+                    <p>No users found.</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Reset Password Modal -->
+    <div class="modal" id="reset-password-modal">
+        <div class="modal-background"></div>
+        <div class="modal-card">
+            <header class="modal-card-head">
+                <p class="modal-card-title">Reset Password for <span id="reset-username"></span></p>
+                <button class="delete" aria-label="close" onclick="closeResetPasswordModal()"></button>
+            </header>
+            <form id="reset-password-form" method="POST" action="{{ url_for('admin_reset_password') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="user_id" id="reset-user-id">
+                <section class="modal-card-body">
+                    <div class="field">
+                        <label class="label">New Password</label>
+                        <div class="control">
+                            <input class="input" type="password" name="new_password" required>
+                        </div>
+                    </div>
+                </section>
+                <footer class="modal-card-foot">
+                    <button class="button is-primary" type="submit">Reset Password</button>
+                    <button class="button" type="button" onclick="closeResetPasswordModal()">Cancel</button>
+                </footer>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        function showResetPasswordModal(username, userId) {
+            document.getElementById('reset-username').textContent = username;
+            document.getElementById('reset-user-id').value = userId;
+            document.getElementById('reset-password-modal').classList.add('is-active');
+        }
+
+        function closeResetPasswordModal() {
+            document.getElementById('reset-password-modal').classList.remove('is-active');
+        }
+    </script>
+</body>
+</html>
