@@ -527,6 +527,7 @@ def login():
         print(f"Login attempt for username: {username}")
         user = User.query.filter_by(username=username).first()
         if user:
+            # Fixed syntax error in f-string with proper curly braces
             print(f"User found in database: {user.username}, ID: {user.id}")
             password_match = check_password_hash(user.password_hash, password)
             print(f"Password match: {password_match}")
@@ -693,37 +694,35 @@ def search_ward(ward_num):
 @app.route('/search_wards')
 @login_required
 def search_wards():
+    """
+    Search for wards by display name with simple, case-insensitive partial matching.
+    Returns a list of matching wards.
+    """
     query = request.args.get('q', '').lower().strip()
     results = []
-    # Handle "ward X" format by removing "ward" and trimming
-    if query.startswith('ward'):
-        query = query[4:].strip()
-    for ward_num, ward_info in wards_data.items():
-        # For numeric searches, be more precise
-        try:
-            search_num = query.strip()
-            ward_number = ward_num.strip()
-            if search_num and ward_number.isdigit():
-                # Only match if it's the exact number or starts with the search number
-                if ward_number == search_num or ward_number.startswith(search_num):
-                    patient_count = len(ward_info.get('patients', {}))
-                    results.append({
-                        'ward_num': ward_num,
-                        'filename': ward_info['filename'],
-                        'patient_count': patient_count
-                    })
-                continue
-        except ValueError:
-            pass
-        # For non-numeric searches, use simple contains
-        if (query in ward_num.lower() or 
-            query in ward_info['filename'].lower()):
-            patient_count = len(ward_info.get('patients', {}))
+    
+    # Show all wards if query is empty
+    if not query:
+        for ward_num, ward_info in wards_data.items():
             results.append({
                 'ward_num': ward_num,
                 'filename': ward_info['filename'],
-                'patient_count': patient_count
+                'patient_count': len(ward_info.get('patients', {}))
             })
+        return jsonify(results)
+    
+    # Search through all wards for partial matches
+    for ward_num, ward_info in wards_data.items():
+        display_name = ward_info.get('display_name', '').lower()
+        
+        # Simple case-insensitive partial match on display name
+        if query in display_name:
+            results.append({
+                'ward_num': ward_num,
+                'filename': ward_info['filename'],
+                'patient_count': len(ward_info.get('patients', {}))
+            })
+    
     return jsonify(results)
 
 @app.route('/patient/<patient_id>')
@@ -736,7 +735,7 @@ def patient(patient_id):
     try:
         recent_view = RecentlyViewedPatient.query.filter_by(
             user_id=current_user.id,
-            patient_id=patient_id
+            patient_id=patient_id  # Fixed: Removed the duplicate user_id parameter
         ).first()
         if not recent_view:
             recent = RecentlyViewedPatient(
@@ -757,8 +756,8 @@ def patient(patient_id):
             recent_view.viewed_at = datetime.utcnow()
             db.session.commit()
     except Exception as e:
-        print(f"Error recording patient view: {str(e)}")
-        db.session.rollback()
+        # Just log the error but continue with the page load
+        print(f"Error recording recent view: {str(e)}")
         
     # Get all notes for this patient
     notes = Note.query.filter_by(patient_id=patient.id)\

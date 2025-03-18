@@ -84,8 +84,25 @@
             </div>
 
             <div class="nav-actions">
+                {% if 'patient' not in request.path %}
+                <a href="{{ url_for('my_shift_notes') }}" class="button is-info is-light mr-2">
+                    <span class="icon">
+                        <i class="fas fa-clipboard-list"></i>
+                    </span>
+                    <span>My Shift Notes</span>
+                </a>
+
+                <a href="{{ url_for('profile') }}" class="button is-light mr-2">
+                    <span class="icon">
+                        <i class="fas fa-hospital"></i>
+                    </span>
+                    <span>Default Ward</span>
+                </a>
+                {% endif %}
+
+                <!-- Moved admin dropdown to always appear before logout -->
                 {% if current_user.role == 'admin' %}
-                <div class="dropdown is-hoverable admin-dropdown">
+                <div class="dropdown is-hoverable admin-dropdown mr-2">
                     <div class="dropdown-trigger">
                         <button class="button is-primary is-light">
                             <span class="icon">
@@ -114,22 +131,6 @@
                         </div>
                     </div>
                 </div>
-                {% endif %}
-
-                {% if 'patient' not in request.path %}
-                <a href="{{ url_for('my_shift_notes') }}" class="button is-info is-light mr-2">
-                    <span class="icon">
-                        <i class="fas fa-clipboard-list"></i>
-                    </span>
-                    <span>My Shift Notes</span>
-                </a>
-
-                <a href="{{ url_for('profile') }}" class="button is-light mr-2">
-                    <span class="icon">
-                        <i class="fas fa-hospital"></i>
-                    </span>
-                    <span>Default Ward</span>
-                </a>
                 {% endif %}
 
                 <a href="{{ url_for('logout_page') }}" class="button is-danger is-light">
