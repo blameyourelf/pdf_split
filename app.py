@@ -48,7 +48,8 @@ from datetime import datetime
 
 from models import (
     db, User, AuditLog, Patient, Note, Ward, 
-    Settings, get_notes_enabled, get_timeout_enabled, get_timeout_minutes
+    Settings, get_notes_enabled, get_timeout_enabled, get_timeout_minutes,
+    CareNote, RecentlyViewedPatient  # Add these missing imports
 )
 from utils.logger import setup_logger
 import traceback
@@ -731,9 +732,15 @@ def patient(patient_id):
     except Exception as e:
         print(f"Error recording patient view: {str(e)}")
         db.session.rollback()
+        
     # Get all notes for this patient
     notes = Note.query.filter_by(patient_id=patient.id)\
         .order_by(Note.timestamp.desc()).all()
+        
+    # Get care notes added during downtime and merge them with PDF notes
+    care_notes = CareNote.query.filter_by(patient_id=patient_id)\
+        .order_by(CareNote.timestamp.desc()).all()
+        
     # Format notes for template
     formatted_notes = []
     for note in notes:
@@ -748,6 +755,23 @@ def patient(patient_id):
         note_dict['note'] = note.note_text
         
         formatted_notes.append(note_dict)
+        
+    # Add care notes to the formatted notes
+    new_note_id = session.pop('new_note_id', None)
+    for care_note in care_notes:
+        care_dict = care_note.to_dict()
+        care_dict['staff'] = User.query.get(care_note.user_id).username
+        care_dict['date'] = care_dict['timestamp']  # Ensure consistent key naming
+        
+        # Mark note as new if it was just added
+        if new_note_id and care_note.id == new_note_id:
+            care_dict['is_new'] = True
+            
+        formatted_notes.append(care_dict)
+        
+    # Sort all notes by timestamp
+    formatted_notes.sort(key=lambda x: datetime.strptime(x.get('timestamp', x.get('date', '2000-01-01')), '%Y-%m-%d %H:%M:%S'), reverse=True)
+        
     # Format patient info for template
     patient_info_dict = {
         "Patient ID": patient.hospital_id,
@@ -755,6 +779,7 @@ def patient(patient_id):
         "Ward": patient.current_ward,
         "DOB": patient.dob,
     }
+    
     ward = Ward.query.filter_by(ward_number=patient.current_ward).first()
     return render_template('patient.html',
                          patient_id=patient_id,
@@ -868,14 +893,24 @@ def add_care_note(patient_id):
         note_text = request.form.get('note')
         if not note_text:
             return jsonify({'error': 'Note text is required'}), 400
+        
         # Find which ward this patient belongs to and get patient name
         ward_id = None
         patient_name = "Unknown"
-        for ward_num, ward_info in wards_data.items():
-            if ward_info.get("patients") and patient_id in ward_info.get("patients", {}):
-                ward_id = ward_num
-                patient_name = ward_info["patients"][patient_id].get("name", "Unknown")
-                break
+        
+        # First try to get patient from the database
+        patient = Patient.query.filter_by(hospital_id=patient_id, is_active=True).first()
+        if patient:
+            ward_id = patient.current_ward
+            patient_name = patient.name
+        else:
+            # Fallback to looking through ward data if not in database
+            for ward_num, ward_info in wards_data.items():
+                if ward_info.get("patients") and patient_id in ward_info.get("patients", {}):
+                    ward_id = ward_num
+                    patient_name = ward_info["patients"][patient_id].get("name", "Unknown")
+                    break
+        
         note = CareNote(
             patient_id=patient_id,
             user_id=current_user.id,
@@ -883,6 +918,7 @@ def add_care_note(patient_id):
             ward_id=ward_id,
             patient_name=patient_name  # Save patient name
         )
+        
         # Add and save the care note
         db.session.add(note)
         safe_commit()
