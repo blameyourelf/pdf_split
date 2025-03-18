@@ -1,0 +1,126 @@
+2025-03-17 22:21:18,616 - werkzeug - INFO -  * Running on http://127.0.0.1:5000/ (Press CTRL+C to quit)
+2025-03-17 22:21:18,620 - werkzeug - INFO -  * Restarting with stat
+2025-03-17 22:21:19,084 - werkzeug - WARNING -  * Debugger is active!
+2025-03-17 22:21:19,098 - werkzeug - INFO -  * Debugger PIN: 465-164-018
+2025-03-17 22:21:39,611 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:21:39] "[32mGET / HTTP/1.1[0m" 302 -
+2025-03-17 22:21:39,615 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:21:39] "[32mGET / HTTP/1.1[0m" 302 -
+2025-03-17 22:21:39,739 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:21:39] "GET /login?next=%2F HTTP/1.1" 200 -
+2025-03-17 22:21:39,773 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:21:39] "GET /login?next=%2F HTTP/1.1" 200 -
+2025-03-17 22:21:39,795 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:21:39] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2025-03-17 22:21:46,426 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:21:46] "[32mPOST /login HTTP/1.1[0m" 302 -
+2025-03-17 22:21:46,482 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:21:46] "[35m[1mGET / HTTP/1.1[0m" 500 -
+2025-03-17 22:21:46,526 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:21:46] "GET /?__debugger__=yes&cmd=resource&f=style.css HTTP/1.1" 200 -
+2025-03-17 22:21:46,526 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:21:46] "GET /?__debugger__=yes&cmd=resource&f=debugger.js HTTP/1.1" 200 -
+2025-03-17 22:21:46,551 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:21:46] "GET /?__debugger__=yes&cmd=resource&f=console.png HTTP/1.1" 200 -
+2025-03-17 22:21:46,552 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:21:46] "GET /?__debugger__=yes&cmd=resource&f=ubuntu.ttf HTTP/1.1" 200 -
+2025-03-17 22:21:46,708 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:21:46] "GET /?__debugger__=yes&cmd=resource&f=console.png HTTP/1.1" 200 -
+2025-03-17 22:23:14,261 - werkzeug - INFO -  * Running on http://127.0.0.1:5000/ (Press CTRL+C to quit)
+2025-03-17 22:23:14,262 - werkzeug - INFO -  * Restarting with stat
+2025-03-17 22:23:14,759 - werkzeug - WARNING -  * Debugger is active!
+2025-03-17 22:23:14,766 - werkzeug - INFO -  * Debugger PIN: 465-164-018
+2025-03-17 22:23:22,055 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:23:22] "GET / HTTP/1.1" 200 -
+2025-03-17 22:23:22,168 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:23:22] "[33mGET /recent-patients HTTP/1.1[0m" 404 -
+2025-03-17 22:23:32,647 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:23:32] "[35m[1mGET /my_shift_notes HTTP/1.1[0m" 500 -
+2025-03-17 22:23:32,677 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:23:32] "GET /my_shift_notes?__debugger__=yes&cmd=resource&f=style.css HTTP/1.1" 200 -
+2025-03-17 22:23:32,680 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:23:32] "GET /my_shift_notes?__debugger__=yes&cmd=resource&f=debugger.js HTTP/1.1" 200 -
+2025-03-17 22:23:32,684 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:23:32] "GET /my_shift_notes?__debugger__=yes&cmd=resource&f=console.png HTTP/1.1" 200 -
+2025-03-17 22:23:32,696 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:23:32] "GET /my_shift_notes?__debugger__=yes&cmd=resource&f=ubuntu.ttf HTTP/1.1" 200 -
+2025-03-17 22:23:32,747 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:23:32] "GET /my_shift_notes?__debugger__=yes&cmd=resource&f=console.png HTTP/1.1" 200 -
+2025-03-17 22:23:38,523 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:23:38] "[35m[1mGET /my_shift_notes HTTP/1.1[0m" 500 -
+2025-03-17 22:23:38,553 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:23:38] "GET /my_shift_notes?__debugger__=yes&cmd=resource&f=style.css HTTP/1.1" 200 -
+2025-03-17 22:23:38,554 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:23:38] "GET /my_shift_notes?__debugger__=yes&cmd=resource&f=debugger.js HTTP/1.1" 200 -
+2025-03-17 22:23:38,560 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:23:38] "GET /my_shift_notes?__debugger__=yes&cmd=resource&f=console.png HTTP/1.1" 200 -
+2025-03-17 22:23:38,564 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:23:38] "GET /my_shift_notes?__debugger__=yes&cmd=resource&f=ubuntu.ttf HTTP/1.1" 200 -
+2025-03-17 22:28:42,738 - werkzeug - INFO -  * Detected change in '/Users/jamiesmith/Visual Studio Coding/pdf_split/app.py', reloading
+2025-03-17 22:28:42,834 - werkzeug - INFO -  * Restarting with stat
+2025-03-17 22:28:43,515 - werkzeug - WARNING -  * Debugger is active!
+2025-03-17 22:28:43,524 - werkzeug - INFO -  * Debugger PIN: 465-164-018
+2025-03-17 22:28:45,695 - werkzeug - INFO -  * Detected change in '/Users/jamiesmith/Visual Studio Coding/pdf_split/ward_manager.py', reloading
+2025-03-17 22:28:45,785 - werkzeug - INFO -  * Restarting with stat
+2025-03-17 22:28:46,254 - werkzeug - WARNING -  * Debugger is active!
+2025-03-17 22:28:46,263 - werkzeug - INFO -  * Debugger PIN: 465-164-018
+2025-03-17 22:28:55,475 - werkzeug - INFO -  * Running on http://127.0.0.1:5000/ (Press CTRL+C to quit)
+2025-03-17 22:28:55,476 - werkzeug - INFO -  * Restarting with stat
+2025-03-17 22:28:55,968 - werkzeug - WARNING -  * Debugger is active!
+2025-03-17 22:28:55,976 - werkzeug - INFO -  * Debugger PIN: 465-164-018
+2025-03-17 22:29:01,840 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:29:01] "GET /logout HTTP/1.1" 200 -
+2025-03-17 22:29:02,900 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:29:02] "[32mPOST /logout HTTP/1.1[0m" 302 -
+2025-03-17 22:29:02,931 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:29:02] "GET /login HTTP/1.1" 200 -
+2025-03-17 22:29:07,405 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:29:07] "[32mPOST /login HTTP/1.1[0m" 302 -
+2025-03-17 22:29:07,460 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:29:07] "[35m[1mGET / HTTP/1.1[0m" 500 -
+2025-03-17 22:29:07,486 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:29:07] "GET /?__debugger__=yes&cmd=resource&f=style.css HTTP/1.1" 200 -
+2025-03-17 22:29:07,488 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:29:07] "GET /?__debugger__=yes&cmd=resource&f=debugger.js HTTP/1.1" 200 -
+2025-03-17 22:29:07,498 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:29:07] "GET /?__debugger__=yes&cmd=resource&f=console.png HTTP/1.1" 200 -
+2025-03-17 22:29:07,503 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:29:07] "GET /?__debugger__=yes&cmd=resource&f=ubuntu.ttf HTTP/1.1" 200 -
+2025-03-17 22:29:19,003 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:29:19] "[32mGET /login HTTP/1.1[0m" 302 -
+2025-03-17 22:29:19,745 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:29:19] "GET /logout HTTP/1.1" 200 -
+2025-03-17 22:29:21,150 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:29:21] "[32mPOST /logout HTTP/1.1[0m" 302 -
+2025-03-17 22:29:21,180 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:29:21] "GET /login HTTP/1.1" 200 -
+2025-03-17 22:29:24,534 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:29:24] "[32mPOST /login HTTP/1.1[0m" 302 -
+2025-03-17 22:29:24,576 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:29:24] "[35m[1mGET / HTTP/1.1[0m" 500 -
+2025-03-17 22:29:24,599 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:29:24] "GET /?__debugger__=yes&cmd=resource&f=style.css HTTP/1.1" 200 -
+2025-03-17 22:29:24,605 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:29:24] "GET /?__debugger__=yes&cmd=resource&f=debugger.js HTTP/1.1" 200 -
+2025-03-17 22:29:24,613 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:29:24] "GET /?__debugger__=yes&cmd=resource&f=ubuntu.ttf HTTP/1.1" 200 -
+2025-03-17 22:29:24,614 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:29:24] "GET /?__debugger__=yes&cmd=resource&f=console.png HTTP/1.1" 200 -
+2025-03-17 22:39:19,597 - werkzeug - INFO -  * Running on http://127.0.0.1:5000/ (Press CTRL+C to quit)
+2025-03-17 22:39:19,598 - werkzeug - INFO -  * Restarting with stat
+2025-03-17 22:39:20,051 - werkzeug - WARNING -  * Debugger is active!
+2025-03-17 22:39:20,060 - werkzeug - INFO -  * Debugger PIN: 465-164-018
+2025-03-17 22:39:25,148 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:39:25] "GET / HTTP/1.1" 200 -
+2025-03-17 22:39:25,252 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:39:25] "[33mGET /recent-patients HTTP/1.1[0m" 404 -
+2025-03-17 22:39:27,986 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:39:27] "[32mGET /my_shift_notes HTTP/1.1[0m" 302 -
+2025-03-17 22:39:28,014 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:39:28] "GET / HTTP/1.1" 200 -
+2025-03-17 22:39:28,056 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:39:28] "[33mGET /recent-patients HTTP/1.1[0m" 404 -
+2025-03-17 22:39:28,751 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:39:28] "[32mGET /my_shift_notes HTTP/1.1[0m" 302 -
+2025-03-17 22:39:28,775 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:39:28] "GET / HTTP/1.1" 200 -
+2025-03-17 22:39:28,801 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:39:28] "[33mGET /recent-patients HTTP/1.1[0m" 404 -
+2025-03-17 22:39:29,337 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:39:29] "[32mGET /my_shift_notes HTTP/1.1[0m" 302 -
+2025-03-17 22:39:29,358 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:39:29] "GET / HTTP/1.1" 200 -
+2025-03-17 22:39:29,383 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:39:29] "[33mGET /recent-patients HTTP/1.1[0m" 404 -
+2025-03-17 22:39:29,899 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:39:29] "[32mGET /my_shift_notes HTTP/1.1[0m" 302 -
+2025-03-17 22:39:29,927 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:39:29] "GET / HTTP/1.1" 200 -
+2025-03-17 22:39:29,957 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:39:29] "[33mGET /recent-patients HTTP/1.1[0m" 404 -
+2025-03-17 22:45:44,961 - werkzeug - INFO -  * Running on http://127.0.0.1:5000/ (Press CTRL+C to quit)
+2025-03-17 22:45:44,962 - werkzeug - INFO -  * Restarting with stat
+2025-03-17 22:45:45,428 - werkzeug - WARNING -  * Debugger is active!
+2025-03-17 22:45:45,436 - werkzeug - INFO -  * Debugger PIN: 465-164-018
+2025-03-17 22:47:06,512 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:47:06] "GET /logout HTTP/1.1" 200 -
+2025-03-17 22:47:07,527 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:47:07] "[32mPOST /logout HTTP/1.1[0m" 302 -
+2025-03-17 22:47:07,550 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:47:07] "GET /login HTTP/1.1" 200 -
+2025-03-17 22:47:10,821 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:47:10] "[32mPOST /login HTTP/1.1[0m" 302 -
+2025-03-17 22:47:10,845 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:47:10] "GET / HTTP/1.1" 200 -
+2025-03-17 22:47:10,876 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:47:10] "[33mGET /recent-patients HTTP/1.1[0m" 404 -
+2025-03-17 22:47:12,478 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:47:12] "[32mGET /my_shift_notes HTTP/1.1[0m" 302 -
+2025-03-17 22:47:12,503 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:47:12] "GET / HTTP/1.1" 200 -
+2025-03-17 22:47:12,533 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:47:12] "[33mGET /recent-patients HTTP/1.1[0m" 404 -
+2025-03-17 22:47:13,932 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:47:13] "[32mGET /my_shift_notes HTTP/1.1[0m" 302 -
+2025-03-17 22:47:13,973 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:47:13] "GET / HTTP/1.1" 200 -
+2025-03-17 22:47:14,005 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:47:14] "[33mGET /recent-patients HTTP/1.1[0m" 404 -
+2025-03-17 22:47:14,555 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:47:14] "[32mGET /my_shift_notes HTTP/1.1[0m" 302 -
+2025-03-17 22:47:14,592 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:47:14] "GET / HTTP/1.1" 200 -
+2025-03-17 22:47:14,619 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:47:14] "[33mGET /recent-patients HTTP/1.1[0m" 404 -
+2025-03-17 22:47:20,137 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:47:20] "GET /admin/notes HTTP/1.1" 200 -
+2025-03-17 22:47:24,274 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:47:24] "[32mPOST /admin/toggle_notes HTTP/1.1[0m" 302 -
+2025-03-17 22:47:24,305 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:47:24] "GET /admin/notes HTTP/1.1" 200 -
+2025-03-17 22:47:25,387 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:47:25] "[32mPOST /admin/toggle_notes HTTP/1.1[0m" 302 -
+2025-03-17 22:47:25,415 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:47:25] "GET /admin/notes HTTP/1.1" 200 -
+2025-03-17 22:47:27,443 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:47:27] "GET / HTTP/1.1" 200 -
+2025-03-17 22:47:27,480 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:47:27] "[33mGET /recent-patients HTTP/1.1[0m" 404 -
+2025-03-17 22:47:28,389 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:47:28] "GET /profile HTTP/1.1" 200 -
+2025-03-17 22:47:37,009 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:47:37] "GET / HTTP/1.1" 200 -
+2025-03-17 22:47:37,039 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 22:47:37] "[33mGET /recent-patients HTTP/1.1[0m" 404 -
+2025-03-17 22:51:17,832 - werkzeug - INFO -  * Detected change in '/Users/jamiesmith/Visual Studio Coding/pdf_split/app.py', reloading
+2025-03-17 22:51:17,930 - werkzeug - INFO -  * Restarting with stat
+2025-03-17 22:51:18,610 - werkzeug - WARNING -  * Debugger is active!
+2025-03-17 22:51:18,619 - werkzeug - INFO -  * Debugger PIN: 465-164-018
+2025-03-17 22:51:19,715 - werkzeug - INFO -  * Detected change in '/Users/jamiesmith/Visual Studio Coding/pdf_split/init_db.py', reloading
+2025-03-17 22:51:19,804 - werkzeug - INFO -  * Restarting with stat
+2025-03-17 23:01:25,133 - werkzeug - INFO -  * Running on http://127.0.0.1:5000/ (Press CTRL+C to quit)
+2025-03-17 23:01:25,134 - werkzeug - INFO -  * Restarting with stat
+2025-03-17 23:01:25,557 - werkzeug - WARNING -  * Debugger is active!
+2025-03-17 23:01:25,567 - werkzeug - INFO -  * Debugger PIN: 465-164-018
+2025-03-17 23:01:30,564 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 23:01:30] "GET / HTTP/1.1" 200 -
+2025-03-17 23:01:30,713 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 23:01:30] "[33mGET /recent-patients HTTP/1.1[0m" 404 -
+2025-03-17 23:01:33,124 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 23:01:33] "[32mGET /my_shift_notes HTTP/1.1[0m" 302 -
+2025-03-17 23:01:33,147 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 23:01:33] "GET / HTTP/1.1" 200 -
+2025-03-17 23:01:33,184 - werkzeug - INFO - 127.0.0.1 - - [17/Mar/2025 23:01:33] "[33mGET /recent-patients HTTP/1.1[0m" 404 -

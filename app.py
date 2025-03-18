@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, session, make_response
+from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, session, make_response, send_file
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -17,8 +17,6 @@ from flask.cli import with_appcontext
 import io
 import csv
 from datetime import datetime, timedelta
-from flask import (Flask, render_template, request, jsonify, redirect, 
-                  url_for, flash, session, make_response, send_file)
 from sqlalchemy import desc
 
 # Try to import xlsxwriter but don't fail if not available
@@ -1073,7 +1071,6 @@ def admin_notes():
     page = request.args.get('page', 1, type=int)
     
     # Debug output to console
-    print(f"Received filter params - ward_id: '{ward_id}', username: '{username}'")
     
     # Build query with filters
     query = CareNote.query
@@ -1114,7 +1111,7 @@ def admin_notes():
     if ward_id and ward_id.strip():
         filters_applied = True
         query = query.filter(CareNote.ward_id == ward_id)
-        print(f"Applied ward filter: {ward_id}")
+        
     
     # Count total matching notes before pagination
     total_notes = query.count()
@@ -1146,7 +1143,6 @@ def admin_notes():
     available_usernames = sorted([users_map.get(uid) for uid in user_ids if uid in users_map])
     # Preserve the exact ward_id from request parameters
     selected_ward = request.args.get('ward', '')
-    print(f"Filter selected_ward: '{selected_ward}'")
     
     filters = {
         'ward': selected_ward,
@@ -1156,7 +1152,6 @@ def admin_notes():
         'applied': filters_applied
     }
     # Debug the filters being passed to template
-    print(f"Filters passed to template: {filters}")
     
     # Process notes for display
     notes = []
@@ -1430,17 +1425,17 @@ def check_session_timeout():
                     return
                 
                 # Debug output
-                print(f"Session timeout check: Last active = {last_active}, Current user: {current_user.username}")
+                
                 
                 timeout_minutes = get_timeout_minutes()
                 last_active_dt = datetime.fromtimestamp(float(last_active))
                 time_diff = datetime.utcnow() - last_active_dt
                 time_diff_minutes = time_diff.total_seconds() / 60
                 
-                print(f"Time difference: {time_diff_minutes:.2f} minutes, Timeout: {timeout_minutes} minutes")
+                
                 
                 if time_diff > timedelta(minutes=timeout_minutes):
-                    print(f"Session timed out for {current_user.username}")
+                    
                     logout_user()
                     flash('Your session has expired due to inactivity')
                     return redirect(url_for('login'))
