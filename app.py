@@ -763,8 +763,10 @@ def patient(patient_id):
         care_dict['staff'] = User.query.get(care_note.user_id).username
         care_dict['date'] = care_dict['timestamp']  # Ensure consistent key naming
         
-        # Mark note as new if it was just added
-        if new_note_id and care_note.id == new_note_id:
+        # Mark manually added notes as new (non-PDF notes)
+        # This will apply the NEW badge to all manually added notes
+        # rather than just the most recently added note
+        if hasattr(care_note, 'is_pdf_note') and not care_note.is_pdf_note:
             care_dict['is_new'] = True
             
         formatted_notes.append(care_dict)
@@ -911,12 +913,14 @@ def add_care_note(patient_id):
                     patient_name = ward_info["patients"][patient_id].get("name", "Unknown")
                     break
         
+        # Create the note and explicitly set is_pdf_note=False to indicate this is a manually added note
         note = CareNote(
             patient_id=patient_id,
             user_id=current_user.id,
             note=note_text,
             ward_id=ward_id,
-            patient_name=patient_name  # Save patient name
+            patient_name=patient_name,
+            is_pdf_note=False  # Explicitly mark this as a manually added note
         )
         
         # Add and save the care note
@@ -926,6 +930,8 @@ def add_care_note(patient_id):
         log_access('add_note', patient_id)
         # Use session-based flash instead of regular flash
         session['care_note_success'] = 'Note added successfully!'
+        # Store the new note ID in session to highlight it
+        session['new_note_id'] = note.id
         return redirect(url_for('patient', patient_id=patient_id))
     except Exception as e:
         app.logger.error(f'Error adding note: {str(e)}\n{traceback.format_exc()}')

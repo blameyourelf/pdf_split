@@ -126,10 +126,12 @@ class CareNote(db.Model):
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
     ward_id = db.Column(db.String(50))  # Ward where the note was added
     patient_name = db.Column(db.String(100))  # Store patient name for efficiency
+    is_pdf_note = db.Column(db.Boolean, default=False)  # Flag to indicate if note is from PDF or manually added
     
     user = db.relationship('User', backref=db.backref('care_notes', lazy=True))
     
     def to_dict(self):
+        # Include is_pdf_note in the dictionary output
         return {
             'id': self.id,
             'patient_id': self.patient_id,
@@ -137,7 +139,8 @@ class CareNote(db.Model):
             'note': self.note,
             'timestamp': self.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
             'ward_id': self.ward_id,
-            'patient_name': self.patient_name
+            'patient_name': self.patient_name,
+            'is_pdf_note': self.is_pdf_note
         }
 
 class RecentlyViewedPatient(db.Model):

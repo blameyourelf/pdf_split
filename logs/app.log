@@ -309,3 +309,261 @@ Traceback (most recent call last):
     raise NotFound()
 werkzeug.exceptions.NotFound: 404 Not Found: The requested URL was not found on the server. If you entered the URL manually please check your spelling and try again.
  [in /Users/jamiesmith/Visual Studio Coding/pdf_split/app.py:1384]
+2025-03-18 22:27:29,837 INFO: Application startup [in /Users/jamiesmith/Visual Studio Coding/pdf_split/utils/logger.py:24]
+2025-03-18 22:27:33,602 ERROR: Unhandled Exception: 404 Not Found: The requested URL was not found on the server. If you entered the URL manually please check your spelling and try again.
+Traceback (most recent call last):
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/flask/app.py", line 1513, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/flask/app.py", line 1489, in dispatch_request
+    self.raise_routing_exception(req)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/flask/app.py", line 1471, in raise_routing_exception
+    raise request.routing_exception  # type: ignore
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/flask/ctx.py", line 367, in match_request
+    result = self.url_adapter.match(return_rule=True)  # type: ignore
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/werkzeug/routing.py", line 2032, in match
+    raise NotFound()
+werkzeug.exceptions.NotFound: 404 Not Found: The requested URL was not found on the server. If you entered the URL manually please check your spelling and try again.
+ [in /Users/jamiesmith/Visual Studio Coding/pdf_split/app.py:1384]
+2025-03-18 22:27:34,536 ERROR: Unhandled Exception: 'CareNote' object has no attribute 'is_pdf_note'
+Traceback (most recent call last):
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/flask/app.py", line 1513, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/flask/app.py", line 1499, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**req.view_args)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/flask_login/utils.py", line 272, in decorated_view
+    return func(*args, **kwargs)
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/app.py", line 767, in patient
+    if not care_note.is_pdf_note:
+           ^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'CareNote' object has no attribute 'is_pdf_note'
+ [in /Users/jamiesmith/Visual Studio Coding/pdf_split/app.py:1384]
+2025-03-18 22:27:36,216 ERROR: Unhandled Exception: 404 Not Found: The requested URL was not found on the server. If you entered the URL manually please check your spelling and try again.
+Traceback (most recent call last):
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/flask/app.py", line 1513, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/flask/app.py", line 1489, in dispatch_request
+    self.raise_routing_exception(req)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/flask/app.py", line 1471, in raise_routing_exception
+    raise request.routing_exception  # type: ignore
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/flask/ctx.py", line 367, in match_request
+    result = self.url_adapter.match(return_rule=True)  # type: ignore
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/werkzeug/routing.py", line 2032, in match
+    raise NotFound()
+werkzeug.exceptions.NotFound: 404 Not Found: The requested URL was not found on the server. If you entered the URL manually please check your spelling and try again.
+ [in /Users/jamiesmith/Visual Studio Coding/pdf_split/app.py:1384]
+2025-03-18 22:31:00,789 INFO: Application startup [in /Users/jamiesmith/Visual Studio Coding/pdf_split/utils/logger.py:24]
+2025-03-18 22:31:03,153 ERROR: Unhandled Exception: 404 Not Found: The requested URL was not found on the server. If you entered the URL manually please check your spelling and try again.
+Traceback (most recent call last):
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/flask/app.py", line 1513, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/flask/app.py", line 1489, in dispatch_request
+    self.raise_routing_exception(req)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/flask/app.py", line 1471, in raise_routing_exception
+    raise request.routing_exception  # type: ignore
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/flask/ctx.py", line 367, in match_request
+    result = self.url_adapter.match(return_rule=True)  # type: ignore
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/werkzeug/routing.py", line 2032, in match
+    raise NotFound()
+werkzeug.exceptions.NotFound: 404 Not Found: The requested URL was not found on the server. If you entered the URL manually please check your spelling and try again.
+ [in /Users/jamiesmith/Visual Studio Coding/pdf_split/app.py:1390]
+2025-03-18 22:31:08,711 ERROR: Error adding note: 'is_pdf_note' is an invalid keyword argument for CareNote
+Traceback (most recent call last):
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/app.py", line 917, in add_care_note
+    note = CareNote(
+        patient_id=patient_id,
+    ...<4 lines>...
+        is_pdf_note=False  # Explicitly mark this as a manually added note
+    )
+  File "<string>", line 4, in __init__
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/sqlalchemy/orm/state.py", line 479, in _initialize_instance
+    with util.safe_reraise():
+         ~~~~~~~~~~~~~~~~~^^
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/sqlalchemy/util/langhelpers.py", line 70, in __exit__
+    compat.raise_(
+    ~~~~~~~~~~~~~^
+        exc_value,
+        ^^^^^^^^^^
+        with_traceback=exc_tb,
+        ^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/sqlalchemy/util/compat.py", line 207, in raise_
+    raise exception
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/sqlalchemy/orm/state.py", line 477, in _initialize_instance
+    return manager.original_init(*mixed[1:], **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/sqlalchemy/orm/decl_base.py", line 1142, in _declarative_constructor
+    raise TypeError(
+        "%r is an invalid keyword argument for %s" % (k, cls_.__name__)
+    )
+TypeError: 'is_pdf_note' is an invalid keyword argument for CareNote
+ [in /Users/jamiesmith/Visual Studio Coding/pdf_split/app.py:937]
+2025-03-18 22:33:17,273 INFO: Application startup [in /Users/jamiesmith/Visual Studio Coding/pdf_split/utils/logger.py:24]
+2025-03-18 22:33:36,275 INFO: Application startup [in /Users/jamiesmith/Visual Studio Coding/pdf_split/utils/logger.py:24]
+2025-03-18 22:33:38,819 ERROR: Unhandled Exception: 404 Not Found: The requested URL was not found on the server. If you entered the URL manually please check your spelling and try again.
+Traceback (most recent call last):
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/flask/app.py", line 1513, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/flask/app.py", line 1489, in dispatch_request
+    self.raise_routing_exception(req)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/flask/app.py", line 1471, in raise_routing_exception
+    raise request.routing_exception  # type: ignore
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/flask/ctx.py", line 367, in match_request
+    result = self.url_adapter.match(return_rule=True)  # type: ignore
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/werkzeug/routing.py", line 2032, in match
+    raise NotFound()
+werkzeug.exceptions.NotFound: 404 Not Found: The requested URL was not found on the server. If you entered the URL manually please check your spelling and try again.
+ [in /Users/jamiesmith/Visual Studio Coding/pdf_split/app.py:1390]
+2025-03-18 22:34:21,293 ERROR: Unhandled Exception: 404 Not Found: The requested URL was not found on the server. If you entered the URL manually please check your spelling and try again.
+Traceback (most recent call last):
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/flask/app.py", line 1513, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/flask/app.py", line 1489, in dispatch_request
+    self.raise_routing_exception(req)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/flask/app.py", line 1471, in raise_routing_exception
+    raise request.routing_exception  # type: ignore
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/flask/ctx.py", line 367, in match_request
+    result = self.url_adapter.match(return_rule=True)  # type: ignore
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/werkzeug/routing.py", line 2032, in match
+    raise NotFound()
+werkzeug.exceptions.NotFound: 404 Not Found: The requested URL was not found on the server. If you entered the URL manually please check your spelling and try again.
+ [in /Users/jamiesmith/Visual Studio Coding/pdf_split/app.py:1390]
+2025-03-18 22:34:38,201 ERROR: Unhandled Exception: 404 Not Found: The requested URL was not found on the server. If you entered the URL manually please check your spelling and try again.
+Traceback (most recent call last):
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/flask/app.py", line 1513, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/flask/app.py", line 1489, in dispatch_request
+    self.raise_routing_exception(req)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/flask/app.py", line 1471, in raise_routing_exception
+    raise request.routing_exception  # type: ignore
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/flask/ctx.py", line 367, in match_request
+    result = self.url_adapter.match(return_rule=True)  # type: ignore
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/werkzeug/routing.py", line 2032, in match
+    raise NotFound()
+werkzeug.exceptions.NotFound: 404 Not Found: The requested URL was not found on the server. If you entered the URL manually please check your spelling and try again.
+ [in /Users/jamiesmith/Visual Studio Coding/pdf_split/app.py:1390]
+2025-03-18 22:34:41,965 ERROR: Unhandled Exception: 404 Not Found: The requested URL was not found on the server. If you entered the URL manually please check your spelling and try again.
+Traceback (most recent call last):
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/flask/app.py", line 1513, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/flask/app.py", line 1489, in dispatch_request
+    self.raise_routing_exception(req)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/flask/app.py", line 1471, in raise_routing_exception
+    raise request.routing_exception  # type: ignore
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/flask/ctx.py", line 367, in match_request
+    result = self.url_adapter.match(return_rule=True)  # type: ignore
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/werkzeug/routing.py", line 2032, in match
+    raise NotFound()
+werkzeug.exceptions.NotFound: 404 Not Found: The requested URL was not found on the server. If you entered the URL manually please check your spelling and try again.
+ [in /Users/jamiesmith/Visual Studio Coding/pdf_split/app.py:1390]
+2025-03-18 22:34:59,046 ERROR: Unhandled Exception: 404 Not Found: The requested URL was not found on the server. If you entered the URL manually please check your spelling and try again.
+Traceback (most recent call last):
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/flask/app.py", line 1513, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/flask/app.py", line 1489, in dispatch_request
+    self.raise_routing_exception(req)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/flask/app.py", line 1471, in raise_routing_exception
+    raise request.routing_exception  # type: ignore
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/flask/ctx.py", line 367, in match_request
+    result = self.url_adapter.match(return_rule=True)  # type: ignore
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/werkzeug/routing.py", line 2032, in match
+    raise NotFound()
+werkzeug.exceptions.NotFound: 404 Not Found: The requested URL was not found on the server. If you entered the URL manually please check your spelling and try again.
+ [in /Users/jamiesmith/Visual Studio Coding/pdf_split/app.py:1390]
+2025-03-18 22:35:19,291 ERROR: Unhandled Exception: 404 Not Found: The requested URL was not found on the server. If you entered the URL manually please check your spelling and try again.
+Traceback (most recent call last):
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/flask/app.py", line 1513, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/flask/app.py", line 1489, in dispatch_request
+    self.raise_routing_exception(req)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/flask/app.py", line 1471, in raise_routing_exception
+    raise request.routing_exception  # type: ignore
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/flask/ctx.py", line 367, in match_request
+    result = self.url_adapter.match(return_rule=True)  # type: ignore
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/werkzeug/routing.py", line 2032, in match
+    raise NotFound()
+werkzeug.exceptions.NotFound: 404 Not Found: The requested URL was not found on the server. If you entered the URL manually please check your spelling and try again.
+ [in /Users/jamiesmith/Visual Studio Coding/pdf_split/app.py:1390]
+2025-03-18 22:35:26,279 ERROR: Unhandled Exception: 404 Not Found: The requested URL was not found on the server. If you entered the URL manually please check your spelling and try again.
+Traceback (most recent call last):
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/flask/app.py", line 1513, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/flask/app.py", line 1489, in dispatch_request
+    self.raise_routing_exception(req)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/flask/app.py", line 1471, in raise_routing_exception
+    raise request.routing_exception  # type: ignore
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/flask/ctx.py", line 367, in match_request
+    result = self.url_adapter.match(return_rule=True)  # type: ignore
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/werkzeug/routing.py", line 2032, in match
+    raise NotFound()
+werkzeug.exceptions.NotFound: 404 Not Found: The requested URL was not found on the server. If you entered the URL manually please check your spelling and try again.
+ [in /Users/jamiesmith/Visual Studio Coding/pdf_split/app.py:1390]
+2025-03-18 22:35:35,330 ERROR: Unhandled Exception: 404 Not Found: The requested URL was not found on the server. If you entered the URL manually please check your spelling and try again.
+Traceback (most recent call last):
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/flask/app.py", line 1513, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/flask/app.py", line 1489, in dispatch_request
+    self.raise_routing_exception(req)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/flask/app.py", line 1471, in raise_routing_exception
+    raise request.routing_exception  # type: ignore
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/flask/ctx.py", line 367, in match_request
+    result = self.url_adapter.match(return_rule=True)  # type: ignore
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/werkzeug/routing.py", line 2032, in match
+    raise NotFound()
+werkzeug.exceptions.NotFound: 404 Not Found: The requested URL was not found on the server. If you entered the URL manually please check your spelling and try again.
+ [in /Users/jamiesmith/Visual Studio Coding/pdf_split/app.py:1390]
+2025-03-18 22:35:52,929 ERROR: Unhandled Exception: 404 Not Found: The requested URL was not found on the server. If you entered the URL manually please check your spelling and try again.
+Traceback (most recent call last):
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/flask/app.py", line 1513, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/flask/app.py", line 1489, in dispatch_request
+    self.raise_routing_exception(req)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/flask/app.py", line 1471, in raise_routing_exception
+    raise request.routing_exception  # type: ignore
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/flask/ctx.py", line 367, in match_request
+    result = self.url_adapter.match(return_rule=True)  # type: ignore
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/werkzeug/routing.py", line 2032, in match
+    raise NotFound()
+werkzeug.exceptions.NotFound: 404 Not Found: The requested URL was not found on the server. If you entered the URL manually please check your spelling and try again.
+ [in /Users/jamiesmith/Visual Studio Coding/pdf_split/app.py:1390]
+2025-03-18 22:36:07,195 ERROR: Unhandled Exception: 404 Not Found: The requested URL was not found on the server. If you entered the URL manually please check your spelling and try again.
+Traceback (most recent call last):
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/flask/app.py", line 1513, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/flask/app.py", line 1489, in dispatch_request
+    self.raise_routing_exception(req)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/flask/app.py", line 1471, in raise_routing_exception
+    raise request.routing_exception  # type: ignore
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/flask/ctx.py", line 367, in match_request
+    result = self.url_adapter.match(return_rule=True)  # type: ignore
+  File "/Users/jamiesmith/Visual Studio Coding/pdf_split/venv/lib/python3.13/site-packages/werkzeug/routing.py", line 2032, in match
+    raise NotFound()
+werkzeug.exceptions.NotFound: 404 Not Found: The requested URL was not found on the server. If you entered the URL manually please check your spelling and try again.
+ [in /Users/jamiesmith/Visual Studio Coding/pdf_split/app.py:1390]
