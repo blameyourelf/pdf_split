@@ -7,8 +7,28 @@
     <div class="notification is-danger">
         <h1 class="title">Internal Server Error</h1>
         <p>An unexpected error has occurred.</p>
-        <p>The administrator has been notified. Please try again later or contact support.</p>
-        <p><a href="{{ url_for('index') }}" class="button is-light mt-4">Return to Home Page</a></p>
+        <p>The administrator has been notified and the error has been logged.</p>
+        <p>Error ID: {{ error_id }}</p>
+        {% if current_user.role == 'admin' %}
+        <div class="mt-4 p-4 has-background-dark has-text-light" style="border-radius: 4px;">
+            <p class="mb-2"><strong>Debug Information:</strong></p>
+            <pre>{{ error_details }}</pre>
+        </div>
+        {% endif %}
+        <div class="mt-4">
+            <a href="{{ url_for('index') }}" class="button is-light">
+                <span class="icon">
+                    <i class="fas fa-home"></i>
+                </span>
+                <span>Return to Home Page</span>
+            </a>
+            <button class="button is-light ml-2" onclick="window.location.reload()">
+                <span class="icon">
+                    <i class="fas fa-redo"></i>
+                </span>
+                <span>Try Again</span>
+            </button>
+        </div>
     </div>
 </div>
 {% endblock %}
