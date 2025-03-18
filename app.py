@@ -645,11 +645,38 @@ def ward(ward_num):
 @app.route('/search_ward/<ward_num>')
 @login_required
 def search_ward(ward_num):
+    """
+    Search endpoint for patients within a specific ward.
+    Prioritizes database data over PDF parsing for efficiency.
+    """
     ward_num = unquote(ward_num)
+    search_query = request.args.get('q', '').strip().lower()
+    
+    # PRIMARY SOURCE: Get patients from the database
+    patients = Patient.query.filter_by(current_ward=ward_num, is_active=True).all()
+    
+    # If database has results, use them
+    if patients:
+        if not search_query:
+            # If no search query, return all patients
+            results = [{"id": patient.hospital_id, "name": patient.name}
+                      for patient in patients]
+        else:
+            # Filter patients based on search query
+            results = [{"id": patient.hospital_id, "name": patient.name}
+                      for patient in patients
+                      if search_query in patient.hospital_id.lower() or 
+                         (patient.name and search_query in patient.name.lower())]
+        
+        return jsonify(results)
+    
+    # FALLBACK: Only use PDF data if database doesn't have patients for this ward
     if ward_num not in wards_data:
         return jsonify([])
-    search_query = request.args.get('q', '').strip().lower()
+        
+    # At this point, we're using the PDF data as fallback
     ward_patients = wards_data[ward_num].get("patients", {})
+    
     # If no search query, return all patients
     if not search_query:
         results = [{"id": pid, "name": data["name"]}
@@ -660,6 +687,7 @@ def search_ward(ward_num):
                   for pid, data in ward_patients.items() 
                   if search_query in pid.lower() or 
                      search_query in data["name"].lower()]
+    
     return jsonify(results)
 
 @app.route('/search_wards')
@@ -718,7 +746,6 @@ def patient(patient_id):
                 patient_name=patient.name
             )
             db.session.add(recent)
-            # Limit to 10 recent patients per user
             older_views = RecentlyViewedPatient.query\
                 .filter_by(user_id=current_user.id)\
                 .order_by(RecentlyViewedPatient.viewed_at.desc())\
@@ -1418,30 +1445,33 @@ def search_ward_patients(ward_id):
     
     # Filter patients based on search query
     results = []
-    if patients:
-        # Use database records when available
-        for patient in patients:
-            if not query or query in patient.hospital_id.lower() or query in patient.name.lower():
-                results.append({
-                    'id': patient.hospital_id,
-                    'name': patient.name
-                })
-    else:
-        # FALLBACK: Only use PDF data if database doesn't have any records for this ward
-        if ward_id in wards_data:
-            # Try to load ward data if not already loaded
-            if not wards_data[ward_id].get('patients'):
-                load_ward_patients(ward_id)
-                
-            patients_data = wards_data[ward_id].get('patients', {})
+    for patient in patients:
+        if not query or query in patient.hospital_id.lower() or (patient.name and query in patient.name.lower()):
+            results.append({
+                'id': patient.hospital_id,
+                'name': patient.name or "Unknown"
+            })
+    
+    # Only fall back to PDF data if database returned no results
+    if not results and ward_id in wards_data:
+        # Log this fallback for monitoring
+        print(f"WARNING: Falling back to PDF parsing for ward {ward_id} - no database records found")
+        
+        # Try to load ward data if not already loaded
+        if not wards_data[ward_id].get('patients'):
+            load_ward_patients(ward_id)
             
-            for patient_id, patient_info in patients_data.items():
-                patient_name = patient_info.get('name', '').lower()
-                if not query or query in patient_id.lower() or query in patient_name:
-                    results.append({
-                        'id': patient_id,
-                        'name': patient_info.get('name', 'Unknown')
-                    })
+        patients_data = wards_data[ward_id].get('patients', {})
+        
+        for patient_id, patient_info in patients_data.items():
+            patient_name = patient_info.get('name', '').lower()
+            if not query or query in patient_id.lower() or query in patient_name:
+                # Add a marker so frontend could potentially show a warning
+                results.append({
+                    'id': patient_id,
+                    'name': patient_info.get('name', 'Unknown'),
+                    'from_pdf': True  # Indicator that this came from PDF not database
+                })
     
     return jsonify(results)
 

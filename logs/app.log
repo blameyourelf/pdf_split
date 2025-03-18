@@ -571,3 +571,6 @@ werkzeug.exceptions.NotFound: 404 Not Found: The requested URL was not found on 
 2025-03-18 22:40:06,693 INFO: Application startup [in /Users/jamiesmith/Visual Studio Coding/pdf_split/utils/logger.py:24]
 2025-03-18 22:42:03,640 INFO: Application startup [in /Users/jamiesmith/Visual Studio Coding/pdf_split/utils/logger.py:24]
 2025-03-18 22:46:06,317 INFO: Application startup [in /Users/jamiesmith/Visual Studio Coding/pdf_split/utils/logger.py:24]
+2025-03-18 22:48:37,502 INFO: Application startup [in /Users/jamiesmith/Visual Studio Coding/pdf_split/utils/logger.py:24]
+2025-03-18 22:50:27,820 INFO: Application startup [in /Users/jamiesmith/Visual Studio Coding/pdf_split/utils/logger.py:24]
+2025-03-18 22:53:30,235 INFO: Application startup [in /Users/jamiesmith/Visual Studio Coding/pdf_split/utils/logger.py:24]
