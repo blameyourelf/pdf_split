@@ -1403,6 +1403,48 @@ def safe_commit():
         app.logger.error(f'Database Error: {str(e)}\n{traceback.format_exc()}')
         raise
 
+# Add this new route to handle ward search queries
+@app.route('/search/<ward_id>')
+@login_required
+def search_ward_patients(ward_id):
+    """
+    Search endpoint for patients within a specific ward.
+    Prioritizes database data over PDF parsing for efficiency.
+    """
+    query = request.args.get('q', '').strip().lower()
+    
+    # PRIMARY SOURCE: Get patients from the database for this ward
+    patients = Patient.query.filter_by(current_ward=ward_id, is_active=True).all()
+    
+    # Filter patients based on search query
+    results = []
+    if patients:
+        # Use database records when available
+        for patient in patients:
+            if not query or query in patient.hospital_id.lower() or query in patient.name.lower():
+                results.append({
+                    'id': patient.hospital_id,
+                    'name': patient.name
+                })
+    else:
+        # FALLBACK: Only use PDF data if database doesn't have any records for this ward
+        if ward_id in wards_data:
+            # Try to load ward data if not already loaded
+            if not wards_data[ward_id].get('patients'):
+                load_ward_patients(ward_id)
+                
+            patients_data = wards_data[ward_id].get('patients', {})
+            
+            for patient_id, patient_info in patients_data.items():
+                patient_name = patient_info.get('name', '').lower()
+                if not query or query in patient_id.lower() or query in patient_name:
+                    results.append({
+                        'id': patient_id,
+                        'name': patient_info.get('name', 'Unknown')
+                    })
+    
+    return jsonify(results)
+
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()

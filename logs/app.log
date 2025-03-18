@@ -567,3 +567,7 @@ Traceback (most recent call last):
     raise NotFound()
 werkzeug.exceptions.NotFound: 404 Not Found: The requested URL was not found on the server. If you entered the URL manually please check your spelling and try again.
  [in /Users/jamiesmith/Visual Studio Coding/pdf_split/app.py:1390]
+2025-03-18 22:38:55,367 INFO: Application startup [in /Users/jamiesmith/Visual Studio Coding/pdf_split/utils/logger.py:24]
+2025-03-18 22:40:06,693 INFO: Application startup [in /Users/jamiesmith/Visual Studio Coding/pdf_split/utils/logger.py:24]
+2025-03-18 22:42:03,640 INFO: Application startup [in /Users/jamiesmith/Visual Studio Coding/pdf_split/utils/logger.py:24]
+2025-03-18 22:46:06,317 INFO: Application startup [in /Users/jamiesmith/Visual Studio Coding/pdf_split/utils/logger.py:24]
