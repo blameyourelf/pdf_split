@@ -1,18 +1,21 @@
 # Contingency EPR Digital Notes Viewer
 
 ## Overview
-The Contingency EPR Digital Notes Viewer is a web application designed to manage and view electronic patient records (EPR) in a hospital setting. It provides functionalities for viewing patient information, adding care notes, exporting notes, and managing session timeouts.
+The Contingency EPR Digital Notes Viewer is a Flask web application designed to serve as a backup system for hospital Electronic Patient Records (EPR). It allows healthcare providers to view patient information and add care notes during main EPR system downtime.
 
 ## Main Features
-- **Patient Records Management**: View and manage patient records, including demographics, vitals, and care notes.
-- **Care Notes**: Add, view, and search care notes for patients.
-- **Export Functionality**: Export notes to PDF and Excel formats.
-- **Session Timeout**: Configure session timeout settings to automatically log out inactive users.
-- **User Preferences**: Set default wards for users.
-- **Audit Log**: View audit logs for user actions.
+- **Database-Driven Architecture**: Patient records, wards, and notes are stored in a SQL database
+- **Care Notes Management**: Add, view, and search continuous care notes for patients
+- **Ward Navigation**: Access patients by ward with intuitive interface
+- **User Management**: Admin controls for creating and managing user accounts
+- **Note Templates**: Predefined templates for common note types
+- **My Shift Notes**: Track notes added during your shift for later transcription
+- **Audit Logging**: Complete history of system actions for accountability
+- **PDF/Excel Export**: Export notes in multiple formats
+- **Session Timeout**: Configurable automatic logout for security
 
 ## Dependencies
-The project relies on several Python packages and other dependencies:
+The project relies on several Python packages:
 - `flask==2.0.1`
 - `flask-sqlalchemy==2.5.1`
 - `flask-login==0.5.0`
@@ -21,7 +24,7 @@ The project relies on several Python packages and other dependencies:
 - `sqlalchemy==1.4.23`
 - `reportlab==4.0.4`
 - `flask-wtf==1.2.1`
-- `xlsxwriter==3.1.2`
+- `xlsxwriter==3.1.2` (optional, for Excel exports)
 
 ## Installation
 1. Clone the repository:
@@ -39,32 +42,50 @@ The project relies on several Python packages and other dependencies:
     pip install -r requirements.txt
     ```
 
-## Usage
+## Initial Setup
 1. Initialize the database:
     ```sh
-    flask init-db
+    python init_db.py
     ```
-2. Run the application:
+2. Run the database migration script to load data:
+    ```sh
+    python migrations/migrate_to_new_schema.py
+    ```
+
+## Usage
+1. Start the application:
+    ```sh
+    python app.py
+    ```
+   or
     ```sh
     flask run
     ```
-3. Access the application in your web browser at `http://127.0.0.1:5000`.
+2. Access the application at `http://127.0.0.1:5000`
+3. Login with the default admin credentials (you should change these):
+   - Username: `admin`
+   - Password: `changeme`
 
-## Configuration
-- **Session Timeout**: Configure session timeout settings in the admin dashboard.
-- **Export Settings**: Ensure `xlsxwriter` is installed for Excel export functionality.
+## Deployment Notes
+- Configure a proper production database for persistent storage
+- Set a strong SECRET_KEY in app.py
+- Set up proper WSGI server (gunicorn, uwsgi) for production use
+- Configure server environment variables as needed
 
 ## File Structure
-- `app.py`: Main application file containing routes and logic.
-- `templates/`: Directory containing HTML templates.
-- `static/`: Directory containing static files (CSS, JS).
-- `models/`: Directory containing database models.
-- `generate_pdf.py`: Script for generating PDF files.
-- `generate_long_stay_ward.py`: Script for generating long stay ward PDFs.
-- `requirements.txt`: List of project dependencies.
+- `app.py`: Main application file with routes and core logic
+- `models.py`: Database models (patients, wards, users, notes)
+- `templates/`: HTML templates for the UI
+- `static/`: CSS, JavaScript and other static assets
+- `migrations/`: Database migration scripts
+- `init_db.py`: Database initialization script
 
-## Contributing
-Contributions are welcome! Please fork the repository and submit a pull request.
+## Data Migration
+The system supports loading data from:
+- Direct database entries
+- PDF patient records (using the provided migration tools)
 
-## License
-This project is licensed.
+## Security Notes
+- Change default credentials immediately
+- Configure session timeout settings in the admin dashboard
+- Regularly backup the database

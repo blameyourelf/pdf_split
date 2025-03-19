@@ -25,14 +25,16 @@ class AuditLog(db.Model):
 class Patient(db.Model):
     __table_args__ = {'extend_existing': True}
     id = db.Column(db.Integer, primary_key=True)
-    hospital_id = db.Column(db.String(50), unique=True, nullable=False)
+    hospital_id = db.Column(db.String(10), unique=True, nullable=False)
     name = db.Column(db.String(100), nullable=False)
-    dob = db.Column(db.String(50))
-    current_ward = db.Column(db.String(50))
+    dob = db.Column(db.String(10), nullable=True)
+    current_ward = db.Column(db.String(50), nullable=False)
+    notes = db.relationship('Note', backref='patient', lazy=True)
     pdf_file = db.Column(db.String(255))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     is_active = db.Column(db.Boolean, default=True)
+    __bind_key__ = 'pdf_parsed'  # Associate with pdf_parsed database
 
 class Note(db.Model):
     __table_args__ = {'extend_existing': True}
@@ -40,13 +42,12 @@ class Note(db.Model):
     patient_id = db.Column(db.Integer, db.ForeignKey('patient.id'), nullable=False)
     staff_name = db.Column(db.String(100), nullable=False)
     note_text = db.Column(db.Text, nullable=False)
-    ward_id = db.Column(db.String(50))
+    ward_id = db.Column(db.String(50), nullable=False)
     timestamp = db.Column(db.DateTime, nullable=False)
-    is_pdf_note = db.Column(db.Boolean, default=False)
+    is_pdf_note = db.Column(db.Boolean, default=True)
     system_user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
-    patient = db.relationship('Patient', backref=db.backref('notes', lazy=True))
     system_user = db.relationship('User', backref=db.backref('notes', lazy=True))
     
     def to_dict(self):
@@ -60,15 +61,17 @@ class Note(db.Model):
             'is_pdf_note': self.is_pdf_note,
             'system_user_id': self.system_user_id
         }
+    __bind_key__ = 'pdf_parsed'  # Associate with pdf_parsed database
 
 class Ward(db.Model):
     __table_args__ = {'extend_existing': True}
     id = db.Column(db.Integer, primary_key=True)
     ward_number = db.Column(db.String(50), unique=True, nullable=False)
-    display_name = db.Column(db.String(100))
-    pdf_file = db.Column(db.String(255))
-    last_updated = db.Column(db.DateTime)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    display_name = db.Column(db.String(100), nullable=False)
+    pdf_file = db.Column(db.String(200), nullable=False)
+    last_updated = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    __bind_key__ = 'pdf_parsed'  # Associate with pdf_parsed database
 
 class Settings(db.Model):
     __table_args__ = {'extend_existing': True}

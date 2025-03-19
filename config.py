@@ -6,14 +6,13 @@ class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'hard-to-guess-key-change-in-production'
     
     # Database settings
-    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or 'sqlite:///users.db'
+    SQLALCHEMY_DATABASE_URI = 'sqlite:///audit.db'
     SQLALCHEMY_BINDS = {
-        'audit': os.environ.get('AUDIT_DATABASE_URL') or 'sqlite:///audit.db'
+        'audit': 'sqlite:///audit.db',
+        'pdf_parsed': 'sqlite:///pdf_parsed.db'  # New database for PDF parsed information
     }
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ENGINE_OPTIONS = {
-        'pool_size': 10,
-        'pool_recycle': 3600,
         'pool_pre_ping': True,
     }
     

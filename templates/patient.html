@@ -121,9 +121,9 @@
             {% if ward_num.isdigit() %}Ward {{ ward_num }}{% else %}{{ ward_num }}{% endif %}
         </div>
         <h1 class="title">Patient Record</h1>
-        <p class="subtitle">{{ pdf_filename }}</p>
+        <p class="subtitle">Database Record</p>
         <p class="subtitle" style="font-size: 0.9rem; color: #718096;">
-            Snapshot taken at: {{ pdf_creation_time }}
+            Last updated: {{ pdf_creation_time }}
         </p>
     </div>
 
@@ -169,6 +169,11 @@
             </button>
             {% endif %}
         </h3>
+
+        <!-- Data source indicator -->
+        <div class="notification is-info is-light mb-3">
+            <p><i class="fas fa-database mr-2"></i> Showing snapshot data from Contingency EPR system.</p>
+        </div>
 
         <!-- Add search box -->
         <div class="field mb-4">

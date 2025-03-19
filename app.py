@@ -2,7 +2,6 @@ from flask import Flask, render_template, request, jsonify, redirect, url_for, f
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
-from PyPDF2 import PdfReader
 from flask_wtf.csrf import CSRFProtect
 import os
 import threading
@@ -152,365 +151,156 @@ wards_data = {}
 # Flag to indicate if data is being loaded
 is_loading_data = False
 
-def extract_patient_info(pdf_path, patient_id=None):
-    """Extract patient info and notes while supporting multiple note formats"""
-    patient_data = {}
-    current_patient = None
-    current_patient_id = None
-    try:
-        reader = PdfReader(pdf_path)
-        for page_idx in range(len(reader.pages)):
-            page = reader.pages[page_idx]
-            text = page.extract_text()
-            # Check if this is a new patient record
-            if "Patient Record - Ward" in text:
-                # Save previous patient if exists
-                if current_patient_id and current_patient:
-                    if not patient_id or current_patient_id == patient_id:
-                        patient_data[current_patient_id] = current_patient
-                # Reset for new patient
-                current_patient = {
-                    "info": {},
-                    "name": "Unknown",
-                    "vitals": "",
-                    "care_notes": []
-                }
-                current_patient_id = None
-                in_care_notes = False
-            # Extract patient ID - MUST do this for all patients
-            if current_patient and not current_patient_id:
-                id_match = re.search(r"Patient ID:\s*(\d+)", text)
-                if id_match:
-                    current_patient_id = id_match.group(1).strip()
-            # If we found the specific patient we're looking for, or we want all patients
-            if not patient_id or (current_patient_id and (current_patient_id == patient_id)):
-                # Extract name if we haven't yet
-                if current_patient and current_patient["name"] == "Unknown":
-                    name_match = re.search(r"Name:\s*([^\n]+)", text)
-                    if name_match:
-                        current_patient["name"] = name_match.group(1).strip()
-                # Extract ward if we haven't yet
-                if current_patient and "Ward" not in current_patient["info"]:
-                    ward_match = re.search(r"Ward:\s*([^\n]+)", text)
-                    if ward_match:
-                        current_patient["info"]["Ward"] = ward_match.group(1).strip()
-                # Extract DOB if we haven't yet
-                if current_patient and "DOB" not in current_patient["info"]:
-                    dob_match = re.search(r"DOB:\s*([^\n]+)", text)
-                    if dob_match:
-                        current_patient["info"]["DOB"] = dob_match.group(1).strip()
-                # Check for care notes section
-                if "Continuous Care Notes" in text and not in_care_notes:
-                    in_care_notes = True
-                # Extract care notes if we're in that section
-                if in_care_notes and current_patient:
-                    # If we're continuing from a previous page, just use the whole text
-                    care_notes_text = text
-                    if "Continuous Care Notes" in text:
-                        # If this page has the header, extract notes from after that
-                        care_notes_section = text.split("Continuous Care Notes", 1)
-                        if len(care_notes_section) > 1:
-                            care_notes_text = care_notes_section[1].strip()
-                    else:
-                        # If we're continuing from previous page, use the whole text
-                        care_notes_text = text
-                    # Check if there's a header row on this page
-                    if "Date & Time" in care_notes_text and "Staff Member" in care_notes_text and "Notes" in care_notes_text:
-                        # Remove header row
-                        header_pos = care_notes_text.find("Notes")
-                        if header_pos > 0:
-                            header_end = care_notes_text.find("\n", header_pos)
-                            if header_end > 0:
-                                care_notes_text = care_notes_text[header_end:].strip()
-                    # Now process the actual notes - try the long notes format first
-                    care_notes_pattern = r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2})\s+([^,]+(?:, [A-Z]+)?)\s+(.+?)(?=(?:\d{4}-\d{2}-\d{2} \d{2}:\d{2})|$)"
-                    matches = list(re.finditer(care_notes_pattern, care_notes_text, re.DOTALL))
-                    if matches:
-                        # Long notes format worked
-                        for match in matches:
-                            date = match.group(1).strip()
-                            staff = match.group(2).strip()
-                            note = match.group(3).strip()
-                            if date and staff and note:
-                                current_patient["care_notes"].append({
-                                    "date": date,
-                                    "staff": staff,
-                                    "note": note
-                                })
-                    else:
-                        # Try alternative format - splitting by lines and looking for date patterns
-                        lines = care_notes_text.split('\n')
-                        i = 0
-                        while i < len(lines):
-                            # Skip empty lines
-                            if not lines[i].strip():
-                                i += 1
-                                continue
-                            # Look for date time pattern at start of line
-                            date_match = re.match(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2})", lines[i].strip())
-                            if date_match:
-                                date = date_match.group(1)
-                                # Extract rest of line after date
-                                line_parts = lines[i][len(date):].strip().split("  ", 1)
-                                if len(line_parts) > 1:
-                                    staff = line_parts[0].strip()
-                                    note_start = line_parts[1].strip()
-                                    # Check for multi-line notes
-                                    note_lines = [note_start]
-                                    j = i + 1
-                                    while j < len(lines) and not re.match(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}", lines[j].strip()):
-                                        if lines[j].strip():  # Only add non-empty lines
-                                            note_lines.append(lines[j].strip())
-                                        j += 1
-                                    full_note = "\n".join(note_lines)
-                                    current_patient["care_notes"].append({
-                                        "date": date,
-                                        "staff": staff,
-                                        "note": full_note
-                                    })
-                                    i = j - 1  # Move to the last processed line
-                            i += 1
-        # Handle last patient
-        if current_patient_id and current_patient:
-            if not patient_id or current_patient_id == patient_id:
-                patient_data[current_patient_id] = current_patient
-        return patient_data
-    except Exception as e:
-        print(f"PDF extraction error: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return {}
+# Remove extract_patient_info function - data should come from database
+# Also remove process_patient_data since it was only used by extract_patient_info
+# Keep other functions intact
 
-def process_patient_data(info_lines):
-    demographics = {}
-    care_notes = []
-    in_care_notes = False
-    header_found = False
-    try:
-        for line in info_lines:
-            line = line.strip()
-            if not line:
-                continue
-            # Check for care notes section
-            if "Continuous Care Notes" in line:
-                in_care_notes = True
-                continue
-            # Skip the header row of the care notes table
-            if in_care_notes and not header_found and "Date & Time" in line:
-                header_found = True
-                continue
-            if not in_care_notes:
-                # Process demographics fields
-                fields = {
-                    "Patient ID:": "Patient ID",
-                    "Name:": "Name",
-                    "Ward:": "Ward",
-                    "DOB:": "DOB",
-                }
-                for prefix, key in fields.items():
-                    if prefix in line:
-                        value = line.split(prefix, 1)[1].strip()
-                        demographics[key] = value
-            elif in_care_notes and header_found:
-                # Process care notes - expecting date, staff member, and note
-                parts = [p.strip() for p in line.split("  ") if p.strip()]
-                if len(parts) >= 3:
-                    care_notes.append({
-                        "date": parts[0],
-                        "staff": parts[1],
-                        "note": " ".join(parts[2:])
-                    })
-                elif len(parts) == 2:
-                    care_notes.append({
-                        "date": parts[0],
-                        "staff": parts[1],
-                        "note": ""
-                    })
-        # Ensure we have a name
-        if "Name" not in demographics:
-            demographics["Name"] = "Unknown"
-        patient_data = {
-            "info": demographics,
-            "name": demographics.get("Name", "Unknown"),
-            "vitals": "",
-            "care_notes": care_notes
-        }
-        return patient_data
-    except Exception as e:
-        return {
-            "info": {"Name": "Error Processing Patient"},
-            "name": "Error Processing Patient",
-            "vitals": "",
-            "care_notes": []
-        }
-
-# Get ward metadata without processing patient data
-def get_ward_metadata():
-    import re
-    wards_meta = {}
-    ward_files = [f for f in os.listdir('.') if f.startswith('ward_') and f.endswith('_records.pdf')]
-    for pdf_filename in ward_files:
-        # Extract ward name/number between 'ward_' and '_records.pdf'
-        ward_part = pdf_filename[5:-12]  # Remove 'ward_' and '_records.pdf'
-        # For numbered wards that use Long_X format
-        if ward_part.startswith('Long_'):
-            display_name = f"Long {ward_part[5:]}"  # Convert Long_1 to "Long 1"
-        # For numeric ward names, prepend "Ward"
-        elif ward_part.isdigit():
-            display_name = f"Ward {ward_part}"
-        else:
-            display_name = ward_part  # Keep special ward names as is
-        wards_meta[ward_part] = {
-            "filename": pdf_filename,
-            "display_name": display_name,
-            "patients": {}  # Empty placeholder, will be filled on demand
-        }
-    # Sort wards
-    sorted_ward_nums = sorted(wards_meta.keys(), key=lambda x: wards_meta[x]["display_name"].lower())
-    sorted_wards_meta = {}
-    for ward_num in sorted_ward_nums:
-        sorted_wards_meta[ward_num] = wards_meta[ward_num]
-    return sorted_wards_meta
-
-# Process a single ward PDF, with caching
-@lru_cache(maxsize=2)  # Reduce cache size to prevent memory issues
+@lru_cache(maxsize=2)
 def process_ward_pdf(pdf_filename):
-    if os.path.exists(pdf_filename):
-        try:
-            patient_info = extract_patient_info(pdf_filename)
-            return patient_info
-        except Exception as e:
-            print(f"Error processing {pdf_filename}: {str(e)}")
-            return {}
+    """Deprecated: Data should come from database initialization"""
     return {}
+
+# Replace PDF-based ward metadata loading with database-only version
+def get_ward_metadata():
+    """Get ward metadata directly from database"""
+    # Query all wards and sort them appropriately
+    return Ward.query.order_by(
+        # Sort numeric wards first, then by number/name
+        db.case([
+            (Ward.ward_number.regexp_match('^\d+$'), 0)
+        ], else_=1),
+        # For numeric wards, sort by integer value
+        db.case([
+            (Ward.ward_number.regexp_match('^\d+$'), 
+             db.cast(Ward.ward_number, db.Integer))
+        ], else_=0),
+        Ward.ward_number
+    ).all()
 
 # Load a specific ward's data
 def load_specific_ward(ward_num):
-    global wards_data
-    # Always clear cache when loading a ward
-    process_ward_pdf.cache_clear()
-    if ward_num in wards_data:
-        pdf_filename = wards_data[ward_num]["filename"]
-        patient_data = process_ward_pdf(pdf_filename)
-        wards_data[ward_num]["patients"] = patient_data
-    else:
-        pass
+    """Get ward and patient data directly from database"""
+    try:
+        # Get ward data
+        ward = Ward.query.filter_by(ward_number=ward_num).first()
+        if not ward:
+            return None
+            
+        # Get all active patients in ward
+        patients = Patient.query.filter_by(
+            current_ward=ward_num,
+            is_active=True
+        ).order_by(Patient.name).all()
+        
+        return {
+            'ward': ward,
+            'patients': patients
+        }
+        
+    except Exception as e:
+        print(f"Error loading ward {ward_num}: {str(e)}")
+        return None
 
-def load_ward_data_background():
-    global wards_data, is_loading_data
-    # First load metadata only (fast)
-    wards_data = get_ward_metadata()
-    is_loading_data = False
-
-# Start with just the metadata
 def init_ward_data():
-    global wards_data, is_loading_data
-    is_loading_data = True
-    threading.Thread(target=load_ward_data_background).start()
-    is_loading_data = False
+    """Initialize ward data ensuring database is ready"""
+    try:
+        # Verify database connectivity and ward table exists
+        Ward.query.first()
+        print("Ward data initialization complete - database ready")
+    except Exception as e:
+        print(f"Error initializing ward data: {str(e)}")
+        # Let the error propagate to trigger app startup failure if DB is not ready
+        raise
 
-# Initialize with metadata
-init_ward_data()
+# Replace the load_ward_patients function with the following:
 
-# Add this function to properly load ward patients data if not already loaded
 def load_ward_patients(ward_num):
-    """Load patient data for a specific ward."""
-    global wards_data
-    if ward_num in wards_data:
-        # Only load if not already loaded
-        if not wards_data[ward_num].get("patients") or len(wards_data[ward_num]["patients"]) == 0:
-            pdf_filename = wards_data[ward_num].get("filename")
-            if pdf_filename and os.path.exists(pdf_filename):
-                try:
-                    # Clear cache to ensure fresh data
-                    process_ward_pdf.cache_clear()
-                    patient_data = process_ward_pdf(pdf_filename)
-                    wards_data[ward_num]["patients"] = patient_data
-                    return True
-                except Exception as e:
-                    print(f"Error loading patients for ward {ward_num}: {str(e)}")
-                    return False
-        return True  # Already loaded
-    return False  # Ward not found
+    """Load patient data from database for a specific ward."""
+    try:
+        # Query the ward record from the database
+        ward = Ward.query.filter_by(ward_number=ward_num).first()
+        if not ward:
+            print(f"Ward {ward_num} not found in database")
+            return None
+        # Query patients from the database
+        patients = Patient.query.filter_by(current_ward=ward_num, is_active=True).order_by(Patient.name).all()
+        patient_data = {}
+        for patient in patients:
+            patient_data[patient.hospital_id] = {
+                "name": patient.name,
+                "info": {
+                    "DOB": patient.dob,
+                    "Ward": ward_num
+                }
+            }
+        # Return a dictionary with ward info and patients data
+        return {
+            "ward": ward,
+            "patients": patient_data
+        }
+    except Exception as e:
+        print(f"Error loading patients for ward {ward_num}: {str(e)}")
+        return None
 
 # Update load_specific_ward to use the new function
 def load_specific_ward(ward_num):
     """Load a specific ward's data (wrapper around load_ward_patients)"""
     return load_ward_patients(ward_num)
 
-# Replace the load_ward_patients function with a more efficient version
-def load_ward_patients(ward_num):
-    """Load patient data for a specific ward, but only if needed."""
-    global wards_data
-    if ward_num in wards_data:
-        # Only load if patients aren't already loaded
-        if not wards_data[ward_num].get("patients") or len(wards_data[ward_num]["patients"]) == 0:
-            pdf_filename = wards_data[ward_num].get("filename")
-            if pdf_filename and os.path.exists(pdf_filename):
-                try:
-                    process_ward_pdf.cache_clear()
-                    patient_data = process_ward_pdf(pdf_filename)
-                    wards_data[ward_num]["patients"] = patient_data
-                    return True
-                except Exception as e:
-                    print(f"Error loading patients for ward {ward_num}: {str(e)}")
-                    return False
-        return True  # Already loaded
-    return False  # Ward not found
-
 # Add a new function to get patient information efficiently
 def get_patient_info_from_ward_data(patient_id, ward_id=None):
-    """
-    Get patient name and ward name from ward data efficiently.
-    Returns tuple of (patient_name, ward_name, ward_id)
-    """
-    # If we know the ward, check it directly first
-    if ward_id and ward_id in wards_data:
-        if not wards_data[ward_id].get("patients"):
-            load_ward_patients(ward_id)
-        ward_info = wards_data[ward_id]
-        patients = ward_info.get("patients", {})
-        if patient_id in patients:
+    """Get patient info directly from database"""
+    if ward_id:
+        # Try specific ward first if provided
+        patient = Patient.query.filter_by(
+            hospital_id=patient_id,
+            current_ward=ward_id,
+            is_active=True
+        ).first()
+        
+        if patient:
+            ward = Ward.query.filter_by(ward_number=ward_id).first()
             return (
-                patients[patient_id].get("name", "Unknown"),
-                ward_info.get("display_name", ward_id),
+                patient.name,
+                ward.display_name if ward else ward_id,
                 ward_id
             )
-    # Try to find patient in frequently used wards first
-    # This optimizes for common wards to avoid loading all wards
-    frequently_used_wards = []
-    # Get recently viewed wards by this user
-    recent_views = RecentlyViewedPatient.query.filter_by(user_id=current_user.id).all()
-    for rv in recent_views:
-        if rv.ward_num and rv.ward_num not in frequently_used_wards:
-            frequently_used_wards.append(rv.ward_num)
-    # Check frequent wards first
-    for ward_num in frequently_used_wards:
-        if ward_num in wards_data:
-            if not wards_data[ward_num].get("patients"):
-                load_ward_patients(ward_num)
-            ward_info = wards_data[ward_num]
-            patients = ward_info.get("patients", {})
-            if patient_id in patients:
-                return (
-                    patients[patient_id].get("name", "Unknown"),
-                    ward_info.get("display_name", ward_num),
-                    ward_num
-                )
-    # If not found in frequent wards, check remaining wards as needed
-    for ward_num, ward_info in wards_data.items():
-        if ward_num in frequently_used_wards:
-            continue  # Skip already checked wards
-        if not ward_info.get("patients"):
-            load_ward_patients(ward_num)
-        patients = ward_info.get("patients", {})
-        if patient_id in patients:
+
+    # Try recent ward history
+    recent_views = RecentlyViewedPatient.query.filter_by(
+        user_id=current_user.id,
+        patient_id=patient_id
+    ).order_by(RecentlyViewedPatient.viewed_at.desc()).first()
+
+    if recent_views:
+        # Verify patient is still in this ward
+        patient = Patient.query.filter_by(
+            hospital_id=patient_id,
+            current_ward=recent_views.ward_num,
+            is_active=True
+        ).first()
+        if patient:
+            ward = Ward.query.filter_by(ward_number=recent_views.ward_num).first()
             return (
-                patients[patient_id].get("name", "Unknown"),
-                ward_info.get("display_name", ward_num),
-                ward_num
+                patient.name,
+                ward.display_name if ward else recent_views.ward_num,
+                recent_views.ward_num
             )
-    # Not found in any ward
+
+    # Fall back to searching all wards
+    patient = Patient.query.filter_by(
+        hospital_id=patient_id,
+        is_active=True
+    ).first()
+    
+    if patient:
+        ward = Ward.query.filter_by(ward_number=patient.current_ward).first()
+        return (
+            patient.name,
+            ward.display_name if ward else patient.current_ward,
+            patient.current_ward
+        )
+
     return ("Unknown", "Unknown", None)
 
 # Fix the login route
@@ -586,22 +376,27 @@ def logout_page():
 @app.route('/')
 @login_required
 def index():
-    """Modified index route with explicit login check and debug info"""
-    # Debug output to confirm we're authenticated
+    """Modified index route to load wards directly from database"""
     print(f"Index accessed by: {current_user.username if current_user.is_authenticated else 'Anonymous'}")
-    print(f"Current user authenticated: {current_user.is_authenticated}")
-    print(f"Session data: {session}")
-    # Explicitly cast to boolean and check for '1'
+    
+    # Get show_all parameter
     show_all = request.args.get('show_all') == '1'
     
-    # Only redirect to default ward if show_all is False AND user has a default ward
+    # If user has default ward and not showing all, redirect to ward
     if current_user.default_ward and not show_all:
         return redirect(url_for('ward', ward_num=current_user.default_ward))
-    # If show_all is True, or user has no default ward, show all wards
-    sorted_wards = {}
-    for ward_id, info in sorted(wards_data.items(), key=lambda x: x[1]['display_name'].lower()):
-        sorted_wards[ward_id] = info
-    return render_template('index.html', wards=sorted_wards, show_all=show_all)
+    
+    # Get wards from database
+    wards = {}
+    ward_records = Ward.query.order_by(Ward.display_name).all()
+    
+    for ward in ward_records:
+        wards[ward.ward_number] = {
+            'display_name': ward.display_name,
+            'filename': 'Database Record'
+        }
+    
+    return render_template('index.html', wards=wards, show_all=show_all)
 
 @app.route('/profile', methods=['GET', 'POST'])
 @login_required
@@ -623,105 +418,106 @@ def profile():
 @app.route('/ward/<ward_num>')
 @login_required
 def ward(ward_num):
+    """Display a ward's patients using database records only"""
     # URL decode the ward_num to handle special characters
     ward_num = unquote(ward_num)
-    # Get ward from database instead of PDF
+    
+    # Get ward from database
     ward = Ward.query.filter_by(ward_number=ward_num).first_or_404()
     
     # Get all patients in this ward
-    patients = Patient.query.filter_by(current_ward=ward_num, is_active=True).all()
+    patients = Patient.query.filter_by(
+        current_ward=ward_num, 
+        is_active=True
+    ).order_by(Patient.name).all()
     
     # Format patient data for template
-    patient_list = [
-        {"id": patient.hospital_id, "name": patient.name}
-        for patient in patients
-    ]
+    patient_data = {
+        p.hospital_id: {
+            "id": p.hospital_id,
+            "name": p.name
+        } for p in patients
+    }
+    
+    # Log this access
     log_access('view_ward', f'Ward {ward_num}')
+    
     return render_template('ward.html',
                          ward_num=ward_num,
-                         ward_data={"patients": {p["id"]: p for p in patient_list}},
-                         pdf_filename=ward.pdf_file,
+                         ward_data={"patients": patient_data},
+                         ward_name=ward.display_name,
+                         pdf_filename="Database record", # Replace PDF filename reference
                          pdf_creation_time=ward.last_updated.strftime("%Y-%m-%d %H:%M:%S") if ward.last_updated else "Unknown")
 
 @app.route('/search_ward/<ward_num>')
 @login_required
 def search_ward(ward_num):
-    """
-    Search endpoint for patients within a specific ward.
-    Prioritizes database data over PDF parsing for efficiency.
-    """
+    """Search endpoint for patients within a specific ward using database only"""
     ward_num = unquote(ward_num)
     search_query = request.args.get('q', '').strip().lower()
     
-    # PRIMARY SOURCE: Get patients from the database
-    patients = Patient.query.filter_by(current_ward=ward_num, is_active=True).all()
+    # Base query for active patients in this ward
+    query = Patient.query.filter_by(
+        current_ward=ward_num, 
+        is_active=True
+    )
     
-    # If database has results, use them
-    if patients:
-        if not search_query:
-            # If no search query, return all patients
-            results = [{"id": patient.hospital_id, "name": patient.name}
-                      for patient in patients]
-        else:
-            # Filter patients based on search query
-            results = [{"id": patient.hospital_id, "name": patient.name}
-                      for patient in patients
-                      if search_query in patient.hospital_id.lower() or 
-                         (patient.name and search_query in patient.name.lower())]
-        
-        return jsonify(results)
+    # Apply search filter if query provided
+    if search_query:
+        query = query.filter(
+            db.or_(
+                Patient.hospital_id.ilike(f'%{search_query}%'),
+                Patient.name.ilike(f'%{search_query}%')
+            )
+        )
     
-    # FALLBACK: Only use PDF data if database doesn't have patients for this ward
-    if ward_num not in wards_data:
-        return jsonify([])
-        
-    # At this point, we're using the PDF data as fallback
-    ward_patients = wards_data[ward_num].get("patients", {})
-    
-    # If no search query, return all patients
-    if not search_query:
-        results = [{"id": pid, "name": data["name"]}
-                  for pid, data in ward_patients.items()]
-    else:
-        # Search in both ID and name
-        results = [{"id": pid, "name": data["name"]}
-                  for pid, data in ward_patients.items() 
-                  if search_query in pid.lower() or 
-                     search_query in data["name"].lower()]
+    # Format results
+    results = [
+        {"id": patient.hospital_id, "name": patient.name}
+        for patient in query.order_by(Patient.name).all()
+    ]
     
     return jsonify(results)
 
 @app.route('/search_wards')
 @login_required
 def search_wards():
-    """
-    Search for wards by display name with simple, case-insensitive partial matching.
-    Returns a list of matching wards.
-    """
+    """Search for wards using database records only"""
     query = request.args.get('q', '').lower().strip()
     results = []
     
-    # Show all wards if query is empty
-    if not query:
-        for ward_num, ward_info in wards_data.items():
-            results.append({
-                'ward_num': ward_num,
-                'filename': ward_info['filename'],
-                'patient_count': len(ward_info.get('patients', {}))
-            })
-        return jsonify(results)
+    # Base query for all active patients grouped by ward
+    ward_counts = db.session.query(
+        Patient.current_ward, 
+        db.func.count(Patient.id)
+    ).filter(
+        Patient.is_active == True
+    ).group_by(
+        Patient.current_ward
+    ).all()
     
-    # Search through all wards for partial matches
-    for ward_num, ward_info in wards_data.items():
-        display_name = ward_info.get('display_name', '').lower()
-        
-        # Simple case-insensitive partial match on display name
-        if query in display_name:
-            results.append({
-                'ward_num': ward_num,
-                'filename': ward_info['filename'],
-                'patient_count': len(ward_info.get('patients', {}))
-            })
+    # Convert to dict for easy lookup
+    count_map = dict(ward_counts)
+    
+    # Get all wards, filter by query if provided
+    wards = Ward.query
+    if query:
+        wards = wards.filter(Ward.display_name.ilike(f'%{query}%'))
+    
+    # Format results
+    for ward in wards.all():
+        results.append({
+            'ward_num': ward.ward_number,
+            'display_name': ward.display_name,
+            'patient_count': count_map.get(ward.ward_number, 0)
+        })
+    
+    # Sort results: numeric wards first, then alphabetically
+    results.sort(key=lambda x: (
+        not x['ward_num'].isdigit(),
+        int(x['ward_num']) if x['ward_num'].isdigit() else float('inf'),
+        x['ward_num']
+    ))
     
     return jsonify(results)
 
@@ -731,11 +527,12 @@ def patient(patient_id):
     # Get patient from database
     patient = Patient.query.filter_by(hospital_id=patient_id, is_active=True).first_or_404()
     log_access('view_patient', patient_id)
+    
     # Record recently viewed
     try:
         recent_view = RecentlyViewedPatient.query.filter_by(
-            user_id=current_user.id,
-            patient_id=patient_id  # Fixed: Removed the duplicate user_id parameter
+            user_id=current_user.id, 
+            patient_id=patient_id
         ).first()
         if not recent_view:
             recent = RecentlyViewedPatient(
@@ -756,50 +553,37 @@ def patient(patient_id):
             recent_view.viewed_at = datetime.utcnow()
             db.session.commit()
     except Exception as e:
-        # Just log the error but continue with the page load
         print(f"Error recording recent view: {str(e)}")
-        
-    # Get all notes for this patient
+
+    # Get all notes from database - already imported during init
     notes = Note.query.filter_by(patient_id=patient.id)\
         .order_by(Note.timestamp.desc()).all()
-        
-    # Get care notes added during downtime and merge them with PDF notes
-    care_notes = CareNote.query.filter_by(patient_id=patient_id)\
-        .order_by(CareNote.timestamp.desc()).all()
-        
+    
+    # Get care notes added during downtime - MODIFY THIS SECTION
+    care_notes = CareNote.query.filter_by(
+        patient_id=patient_id  # Use patient_id directly since that's how we store it
+    ).order_by(CareNote.timestamp.desc()).all()
+
     # Format notes for template
     formatted_notes = []
-    for note in notes:
-        note_dict = note.to_dict()
-        if note.system_user_id:
-            user = User.query.get(note.system_user_id)
-            note_dict['staff'] = user.username if user else 'Unknown'
-        else:
-            note_dict['staff'] = note.staff_name
-        
-        # Add this line to ensure the note content is available with the key 'note'
-        note_dict['note'] = note.note_text
-        
-        formatted_notes.append(note_dict)
-        
-    # Add care notes to the formatted notes
-    new_note_id = session.pop('new_note_id', None)
+    
+    # Add care notes with proper formatting
     for care_note in care_notes:
         care_dict = care_note.to_dict()
-        care_dict['staff'] = User.query.get(care_note.user_id).username
-        care_dict['date'] = care_dict['timestamp']  # Ensure consistent key naming
-        
-        # Mark manually added notes as new (non-PDF notes)
-        # This will apply the NEW badge to all manually added notes
-        # rather than just the most recently added note
-        if hasattr(care_note, 'is_pdf_note') and not care_note.is_pdf_note:
+        # Get the username of who wrote the note
+        user = User.query.get(care_note.user_id)
+        care_dict['staff'] = user.username if user else 'Unknown'
+        care_dict['date'] = care_dict['timestamp']  # Use timestamp as date
+        if not care_note.is_pdf_note:
             care_dict['is_new'] = True
-            
         formatted_notes.append(care_dict)
-        
+
     # Sort all notes by timestamp
-    formatted_notes.sort(key=lambda x: datetime.strptime(x.get('timestamp', x.get('date', '2000-01-01')), '%Y-%m-%d %H:%M:%S'), reverse=True)
-        
+    formatted_notes.sort(
+        key=lambda x: datetime.strptime(x['timestamp'], '%Y-%m-%d %H:%M:%S'), 
+        reverse=True
+    )
+
     # Format patient info for template
     patient_info_dict = {
         "Patient ID": patient.hospital_id,
@@ -822,33 +606,16 @@ def patient(patient_id):
 @app.route('/pdf/<patient_id>')
 @login_required
 def serve_patient_pdf(patient_id):
-    # Try to find which ward contains this patient
-    ward_num_found = None
-    for ward_num, ward_info in wards_data.items():
-        if ward_info.get("patients") and patient_id in ward_info["patients"]:
-            ward_num_found = ward_num
-            break
-    if not ward_num_found:
-        # This is inefficient but necessary if we don't know which ward has the patient
-        for ward_num in wards_data:
-            load_specific_ward(ward_num)
-            if ward_num in wards_data and wards_data[ward_num].get("patients") and patient_id in wards_data[ward_num]["patients"]:
-                ward_num_found = ward_num
-                break
-    if ward_num_found:
-        # Log this access
-        log_access('view_pdf', patient_id)
-        # Get the PDF filename
-        pdf_filename = wards_data[ward_num_found]["filename"]
-        # Return a response with instructions to create a proper PDF viewer
-        return """
-        <div style="padding: 20px; font-family: Arial, sans-serif; text-align: center;">
-            <h2>PDF Viewer Not Available</h2>
-            <p>Individual PDF extraction for patient records is not implemented in this version.</p>
-            <p>Patient data is displayed in the main patient view.</p>
-        </div>
-        """
-    return "Patient PDF not found", 404
+    """Return a standardized message - PDF viewing is deprecated"""
+    log_access('view_pdf', patient_id)
+    return """
+    <div style="padding: 20px; font-family: Arial, sans-serif; text-align: center;">
+        <h2>PDF Viewer Not Available</h2>
+        <p>Individual PDF viewing has been deprecated. All patient data is now available in the main view.</p>
+        <p>Please use the patient view page to access patient information.</p>
+        <p><a href="/patient/{0}" style="color: #3182ce;">Return to Patient View</a></p>
+    </div>
+    """.format(patient_id)
 
 @app.route('/audit-log')
 @login_required
@@ -862,19 +629,19 @@ def view_audit_log():
 @app.route('/ward_patient_count/<ward_num>')
 @login_required
 def ward_patient_count(ward_num):
-    # URL decode the ward_num to handle special characters
+    """Get patient count for a ward using direct database query"""
     ward_num = unquote(ward_num)
-    # Check if we already have the ward data loaded
-    if ward_num in wards_data and wards_data[ward_num].get("patients"):
-        count = len(wards_data[ward_num]["patients"])
-    else:
-        # Load ward data if not already loaded
-        load_specific_ward(ward_num)
-        if ward_num in wards_data and wards_data[ward_num].get("patients"):
-            count = len(wards_data[ward_num]["patients"])
-        else:
-            count = 0
-    return jsonify({"ward": ward_num, "count": count})
+    
+    # Get count of active patients in this ward
+    count = Patient.query.filter_by(
+        current_ward=ward_num,
+        is_active=True
+    ).count()
+    
+    return jsonify({
+        "ward": ward_num,
+        "count": count
+    })
 
 @app.route('/recent-patients')
 @login_required
@@ -914,55 +681,45 @@ def toggle_notes():
 @app.route('/add_care_note/<patient_id>', methods=['POST'])
 @login_required
 def add_care_note(patient_id):
+    """Add a care note to a patient using database only"""
     if not get_notes_enabled():
         flash('Note-adding functionality is currently disabled by the administrator', 'note-error')
         return redirect(url_for('patient', patient_id=patient_id))
+        
     try:
         note_text = request.form.get('note')
         if not note_text:
             return jsonify({'error': 'Note text is required'}), 400
         
-        # Find which ward this patient belongs to and get patient name
-        ward_id = None
-        patient_name = "Unknown"
+        # Get patient from database
+        patient = Patient.query.filter_by(hospital_id=patient_id, is_active=True).first_or_404()
         
-        # First try to get patient from the database
-        patient = Patient.query.filter_by(hospital_id=patient_id, is_active=True).first()
-        if patient:
-            ward_id = patient.current_ward
-            patient_name = patient.name
-        else:
-            # Fallback to looking through ward data if not in database
-            for ward_num, ward_info in wards_data.items():
-                if ward_info.get("patients") and patient_id in ward_info.get("patients", {}):
-                    ward_id = ward_num
-                    patient_name = ward_info["patients"][patient_id].get("name", "Unknown")
-                    break
-        
-        # Create the note and explicitly set is_pdf_note=False to indicate this is a manually added note
+        # Create new care note
         note = CareNote(
             patient_id=patient_id,
             user_id=current_user.id,
             note=note_text,
-            ward_id=ward_id,
-            patient_name=patient_name,
-            is_pdf_note=False  # Explicitly mark this as a manually added note
+            ward_id=patient.current_ward,
+            patient_name=patient.name,
+            is_pdf_note=False  # Always false for manually added notes
         )
         
-        # Add and save the care note
         db.session.add(note)
         safe_commit()
+        
         # Record in audit log
         log_access('add_note', patient_id)
-        # Use session-based flash instead of regular flash
+        
+        # Add success message
         session['care_note_success'] = 'Note added successfully!'
-        # Store the new note ID in session to highlight it
         session['new_note_id'] = note.id
+        
         return redirect(url_for('patient', patient_id=patient_id))
+        
     except Exception as e:
-        app.logger.error(f'Error adding note: {str(e)}\n{traceback.format_exc()}')
-        flash('Error adding note: ' + str(e), 'note-error')
-        return jsonify({'error': str(e)}), 500
+        print(f"Error adding care note: {str(e)}")
+        flash('Error adding note. Please try again.', 'note-error')
+        return redirect(url_for('patient', patient_id=patient_id))
 
 @app.route('/my_shift_notes')
 @login_required
@@ -1431,46 +1188,33 @@ def safe_commit():
 
 # Add this new route to handle ward search queries
 @app.route('/search/<ward_id>')
-@login_required
+@login_required 
 def search_ward_patients(ward_id):
-    """
-    Search endpoint for patients within a specific ward.
-    Prioritizes database data over PDF parsing for efficiency.
-    """
+    """Search endpoint for patients within a specific ward using database only"""
     query = request.args.get('q', '').strip().lower()
     
-    # PRIMARY SOURCE: Get patients from the database for this ward
-    patients = Patient.query.filter_by(current_ward=ward_id, is_active=True).all()
+    # Use database query with optional search filter
+    base_query = Patient.query.filter_by(
+        current_ward=ward_id,
+        is_active=True
+    )
     
-    # Filter patients based on search query
-    results = []
-    for patient in patients:
-        if not query or query in patient.hospital_id.lower() or (patient.name and query in patient.name.lower()):
-            results.append({
-                'id': patient.hospital_id,
-                'name': patient.name or "Unknown"
-            })
+    if query:
+        base_query = base_query.filter(
+            db.or_(
+                Patient.hospital_id.ilike(f'%{query}%'),
+                Patient.name.ilike(f'%{query}%')
+            )
+        )
     
-    # Only fall back to PDF data if database returned no results
-    if not results and ward_id in wards_data:
-        # Log this fallback for monitoring
-        print(f"WARNING: Falling back to PDF parsing for ward {ward_id} - no database records found")
-        
-        # Try to load ward data if not already loaded
-        if not wards_data[ward_id].get('patients'):
-            load_ward_patients(ward_id)
-            
-        patients_data = wards_data[ward_id].get('patients', {})
-        
-        for patient_id, patient_info in patients_data.items():
-            patient_name = patient_info.get('name', '').lower()
-            if not query or query in patient_id.lower() or query in patient_name:
-                # Add a marker so frontend could potentially show a warning
-                results.append({
-                    'id': patient_id,
-                    'name': patient_info.get('name', 'Unknown'),
-                    'from_pdf': True  # Indicator that this came from PDF not database
-                })
+    # Get patients ordered by name
+    patients = base_query.order_by(Patient.name).all()
+    
+    # Format results
+    results = [{
+        'id': patient.hospital_id,
+        'name': patient.name or 'Unknown'
+    } for patient in patients]
     
     return jsonify(results)
 
@@ -1697,7 +1441,7 @@ def manage_template_categories():
             return jsonify({"success": False, "error": "Category name is required"}), 400
         
         # Check if category already exists
-        existing = TemplateCategory.query.filter_by(name=name).first()
+        existing = TemplateCategory.query.filter_by(name(name)).first()
         if existing:
             return jsonify({"success": False, "error": "Category already exists"}), 400
         
