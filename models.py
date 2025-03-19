@@ -163,3 +163,24 @@ class RecentlyViewedPatient(db.Model):
             'patient_name': self.patient_name,
             'viewed_at': self.viewed_at.strftime('%Y-%m-%d %H:%M:%S')
         }
+
+class NoteTemplate(db.Model):
+    """Model for predefined note templates"""
+    __table_args__ = {'extend_existing': True}
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)  # Template name (e.g., "Medical Clerking")
+    content = db.Column(db.Text, nullable=False)      # Template content
+    category = db.Column(db.String(50))               # Optional category for grouping
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    is_active = db.Column(db.Boolean, default=True)   # To allow disabling without deleting
+    category_id = db.Column(db.Integer, db.ForeignKey('template_category.id'))  # Foreign key to category
+    
+    # Add relationship to TemplateCategory
+    template_category = db.relationship('TemplateCategory', backref='templates')
+
+class TemplateCategory(db.Model):
+    """Model for note template categories"""
+    __table_args__ = {'extend_existing': True}
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(50), nullable=False, unique=True)  # Category name
+    is_active = db.Column(db.Boolean, default=True)  # To allow disabling without deleting

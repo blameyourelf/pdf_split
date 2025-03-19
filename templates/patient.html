@@ -69,6 +69,7 @@
         color: #2d3748;
         font-size: 0.875rem;
         vertical-align: top;
+        line-height: 1.2; /* Tighter line height */
     }
     .care-notes-table tr:hover {
         background-color: #f7fafc;
@@ -229,6 +230,19 @@
             <form id="note-form" method="POST" action="/add_care_note/{{ patient_id }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="field">
+                    <label class="label">Template</label>
+                    <div class="control">
+                        <div class="select is-fullwidth">
+                            <select id="note-template-selector">
+                                <option value="">-- Select a template --</option>
+                                <!-- Templates will be loaded here via JavaScript -->
+                            </select>
+                        </div>
+                    </div>
+                    <p class="help mt-1">Select a template or write a custom note below</p>
+                </div>
+
+                <div class="field">
                     <label class="label">Note</label>
                     <div class="control">
                         <textarea class="textarea" name="note" id="note-text" placeholder="Enter care note..."></textarea>
@@ -335,19 +349,6 @@
         }
     }
 
-    function showAddNoteModal() {
-        document.getElementById('add-note-modal').classList.add('is-active');
-        // Focus the textarea after modal is shown
-        setTimeout(() => {
-            document.getElementById('note-text').focus();
-        }, 100);
-    }
-
-    function closeAddNoteModal() {
-        document.getElementById('add-note-modal').classList.remove('is-active');
-        document.getElementById('note-text').value = '';
-    }
-
     document.addEventListener('DOMContentLoaded', function() {
         // Display first 20 notes immediately for quick initial render
         const allNotes = {{ care_notes|tojson }};
@@ -434,6 +435,102 @@
         row.appendChild(noteCell);
         
         return row;
+    }
+
+    // Add this to the existing script block
+    document.addEventListener('DOMContentLoaded', function() {
+        // Load templates into the dropdown when the modal is opened
+        loadNoteTemplates();
+        
+        // Add event listener to the template selector
+        document.getElementById('note-template-selector').addEventListener('change', function() {
+            const selectedTemplateId = this.value;
+            if (selectedTemplateId) {
+                insertTemplateContent(selectedTemplateId);
+            }
+        });
+    });
+
+    async function loadNoteTemplates() {
+        try {
+            const response = await fetch('/note_templates');
+            if (!response.ok) {
+                throw new Error('Failed to load templates');
+            }
+            
+            const templates = await response.json();
+            const selector = document.getElementById('note-template-selector');
+            
+            // Clear existing options except the first one
+            while (selector.options.length > 1) {
+                selector.options.remove(1);
+            }
+            
+            // Group templates by category
+            const templatesByCategory = {};
+            
+            templates.forEach(template => {
+                const category = template.category || 'General';
+                if (!templatesByCategory[category]) {
+                    templatesByCategory[category] = [];
+                }
+                templatesByCategory[category].push(template);
+            });
+            
+            // Add templates to dropdown, grouped by category
+            for (const category in templatesByCategory) {
+                // Add optgroup for category
+                const optgroup = document.createElement('optgroup');
+                optgroup.label = category;
+                
+                // Add options for templates in this category
+                templatesByCategory[category].forEach(template => {
+                    const option = document.createElement('option');
+                    option.value = template.id;
+                    option.textContent = template.name;
+                    optgroup.appendChild(option);
+                });
+                
+                selector.appendChild(optgroup);
+            }
+        } catch (error) {
+            console.error('Error loading templates:', error);
+        }
+    }
+
+    async function insertTemplateContent(templateId) {
+        try {
+            const response = await fetch('/note_templates');
+            if (!response.ok) {
+                throw new Error('Failed to load templates');
+            }
+            
+            const templates = await response.json();
+            const template = templates.find(t => t.id == templateId);
+            
+            if (template) {
+                const textarea = document.getElementById('note-text');
+                textarea.value = template.content;
+                textarea.focus();
+            }
+        } catch (error) {
+            console.error('Error inserting template content:', error);
+        }
+    }
+
+    function showAddNoteModal() {
+        document.getElementById('add-note-modal').classList.add('is-active');
+        // Reset the template selector
+        document.getElementById('note-template-selector').value = '';
+        // Focus the textarea after modal is shown
+        setTimeout(() => {
+            document.getElementById('note-text').focus();
+        }, 100);
+    }
+
+    function closeAddNoteModal() {
+        document.getElementById('add-note-modal').classList.remove('is-active');
+        document.getElementById('note-text').value = '';
     }
 </script>
 {% endblock %}

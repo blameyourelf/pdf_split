@@ -49,7 +49,7 @@ from datetime import datetime
 from models import (
     db, User, AuditLog, Patient, Note, Ward, 
     Settings, get_notes_enabled, get_timeout_enabled, get_timeout_minutes,
-    CareNote, RecentlyViewedPatient  # Add these missing imports
+    CareNote, RecentlyViewedPatient, NoteTemplate, TemplateCategory  # Add these missing imports
 )
 from utils.logger import setup_logger
 import traceback
@@ -1569,12 +1569,180 @@ def admin_reset_password():
     
     return redirect(url_for('admin_users'))
 
+@app.route('/note_templates')
+@login_required
+def get_note_templates():
+    """Get all active note templates"""
+    templates = NoteTemplate.query.filter_by(is_active=True).order_by(NoteTemplate.name).all()
+    return jsonify([{
+        'id': template.id,
+        'name': template.name,
+        'content': template.content,
+        'category': template.template_category.name if template.template_category else template.category or 'General'
+    } for template in templates])
+
+@app.route('/admin/templates', methods=['GET', 'POST', 'DELETE'])
+@login_required
+def admin_templates():
+    """Admin page for managing note templates"""
+    # Only admins can access this page
+    if current_user.role != 'admin':
+        flash('Access denied')
+        return redirect(url_for('index'))
+    
+    if request.method == 'POST':
+        # Handle adding or editing templates
+        template_id = request.form.get('template_id')
+        name = request.form.get('name')
+        content = request.form.get('content')
+        category_id = request.form.get('category_id')
+        
+        if not name or not content or not category_id:
+            flash('Template name, content, and category are required', 'danger')
+        else:
+            if template_id:  # Edit existing
+                template = NoteTemplate.query.get(template_id)
+                if template:
+                    template.name = name
+                    template.content = content
+                    template.category_id = category_id
+                    db.session.commit()
+                    flash(f'Template "{name}" updated successfully', 'success')
+            else:  # Add new
+                template = NoteTemplate(
+                    name=name,
+                    content=content,
+                    category_id=category_id,
+                    is_active=True
+                )
+                db.session.add(template)
+                db.session.commit()
+                flash(f'Template "{name}" added successfully', 'success')
+        
+        return redirect(url_for('admin_templates'))
+    
+    # Handle DELETE request (AJAX)
+    if request.method == 'DELETE':
+        data = request.get_json()
+        template_id = data.get('template_id')
+        
+        template = NoteTemplate.query.get(template_id)
+        if template:
+            template.is_active = False  # Soft delete
+            db.session.commit()
+            return jsonify({'success': True})
+        return jsonify({'success': False, 'error': 'Template not found'}), 404
+    
+    # GET request - show template management page
+    # Modified to handle both templates with and without category_id
+    templates_query = db.session.query(
+        NoteTemplate.id, 
+        NoteTemplate.name, 
+        NoteTemplate.content,
+        NoteTemplate.category,
+        TemplateCategory.id.label('category_id'),
+        TemplateCategory.name.label('category_name')
+    ).outerjoin(  # Use outerjoin to include templates without category_id
+        TemplateCategory,
+        NoteTemplate.category_id == TemplateCategory.id
+    ).filter(
+        NoteTemplate.is_active == True
+    )
+    
+    # Apply order by
+    templates = templates_query.order_by(
+        TemplateCategory.name.nulls_last(),  # Handle NULL values in sorting 
+        NoteTemplate.name
+    ).all()
+    
+    # Get all categories - Remove filter that excludes admin category
+    categories = []
+    for cat in TemplateCategory.query.order_by(TemplateCategory.name).all():
+        templates_count = NoteTemplate.query.filter_by(category_id=cat.id, is_active=True).count()
+        categories.append({
+            'id': cat.id,
+            'name': cat.name,
+            'has_templates': templates_count > 0
+        })
+    
+    return render_template('admin_templates.html', templates=templates, categories=categories)
+
+@app.route('/admin/templates/<int:template_id>')
+@login_required
+def get_template(template_id):
+    """API endpoint to get a single template for editing"""
+    if current_user.role != 'admin':
+        return jsonify({"error": "Access denied"}), 403
+        
+    template = NoteTemplate.query.get_or_404(template_id)
+    return jsonify({
+        'id': template.id,
+        'name': template.name,
+        'content': template.content,
+        'category_id': template.category_id
+    })
+
+@app.route('/admin/template-categories', methods=['POST', 'DELETE'])
+@login_required
+def manage_template_categories():
+    """API endpoint to manage template categories"""
+    if current_user.role != 'admin':
+        return jsonify({"error": "Access denied"}), 403
+    
+    if request.method == 'POST':
+        data = request.get_json()
+        name = data.get('name', '').strip()
+        
+        if not name:
+            return jsonify({"success": False, "error": "Category name is required"}), 400
+        
+        # Check if category already exists
+        existing = TemplateCategory.query.filter_by(name=name).first()
+        if existing:
+            return jsonify({"success": False, "error": "Category already exists"}), 400
+        
+        # Create new category
+        category = TemplateCategory(name=name)
+        db.session.add(category)
+        db.session.commit()
+        return jsonify({"success": True, "id": category.id, "name": category.name})
+    
+    if request.method == 'DELETE':
+        data = request.get_json()
+        category_id = data.get('category_id')
+        force_delete = data.get('force_delete', False)
+        
+        # Check if category exists
+        category = TemplateCategory.query.get_or_404(category_id)
+        
+        # Check if any templates use this category
+        templates_count = NoteTemplate.query.filter_by(category_id=category_id).count()
+        
+        # If templates exist and force_delete is not True, return an error
+        if templates_count > 0 and not force_delete:
+            return jsonify({
+                "success": False,
+                "error": f"Cannot delete category that has {templates_count} templates",
+                "templates_count": templates_count
+            }), 400
+        
+        # If force_delete is True, reassign templates to NULL category
+        if templates_count > 0 and force_delete:
+            # Set category_id to NULL for all templates in this category
+            NoteTemplate.query.filter_by(category_id=category_id).update({NoteTemplate.category_id: None})
+            db.session.commit()
+        
+        # Delete the category
+        db.session.delete(category)
+        db.session.commit()
+        return jsonify({"success": True})
+
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
         db.create_all(bind=['audit'])
         # Create default admin user if not exists
-        if not User.query.filter_by(username='admin').first():
+        if not User.query.filter_by(username('admin')).first():
             admin = User(
                 username='admin',
                 password_hash=generate_password_hash('admin123'),
@@ -1582,7 +1750,7 @@ if __name__ == '__main__':
             )
             db.session.add(admin)
         # Create test user if not exists
-        if not User.query.filter_by(username='nurse1').first():
+        if not User.query.filter_by(username('nurse1')).first():
             test_user = User(
                 username='nurse1',
                 password_hash=generate_password_hash('nurse123'),

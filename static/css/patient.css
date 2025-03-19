@@ -1,0 +1,15 @@
+/* Note content styling to reduce line height */
+.care-notes-table td.note-cell {
+    white-space: pre-wrap;
+    line-height: 1.2;  /* Reduce line spacing */
+}
+
+.care-notes-table pre {
+    margin: 0;
+    padding: 0;
+    font-family: inherit;
+    white-space: pre-wrap;
+    line-height: 1.2;  /* Ensure consistent line spacing */
+    background-color: transparent;
+    border: none;
+}

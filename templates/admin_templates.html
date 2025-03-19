@@ -1,0 +1,425 @@
+{% extends "base.html" %}
+
+{% block title %}Manage Note Templates - Admin{% endblock %}
+
+{% block context_actions %}
+<a href="/" class="button is-info is-light">
+    <span class="icon">
+        <i class="fas fa-arrow-left"></i>
+    </span>
+    <span>Back to Home</span>
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1 class="title">Manage Note Templates</h1>
+    <p class="subtitle">Create and edit templates for patient notes</p>
+    
+    <div class="buttons mb-4">
+        <button id="show-add-template-btn" class="button is-primary">
+            <span class="icon">
+                <i class="fas fa-plus"></i>
+            </span>
+            <span>Add New Template</span>
+        </button>
+        
+        <button id="manage-categories-btn" class="button is-info is-light">
+            <span class="icon">
+                <i class="fas fa-tags"></i>
+            </span>
+            <span>Manage Categories</span>
+        </button>
+    </div>
+    
+    <!-- Collapsible Add Template Form -->
+    <div id="add-template-form" class="box" style="display: none;">
+        <h3 class="title is-5">
+            <span class="icon"><i class="fas fa-plus"></i></span>
+            Add New Template
+        </h3>
+        <form method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="field">
+                <label class="label">Template Name</label>
+                <div class="control">
+                    <input class="input" type="text" name="name" required>
+                </div>
+            </div>
+            
+            <div class="field">
+                <label class="label">Category</label>
+                <div class="control">
+                    <div class="select is-fullwidth">
+                        <select name="category_id" required>
+                            <option value="">-- Select Category --</option>
+                            {% for category in categories %}
+                                <option value="{{ category.id }}">{{ category.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="field">
+                <label class="label">Template Content</label>
+                <p class="help is-info mb-2">Use line breaks to create spacing in your template. The formatting will be preserved when notes are displayed.</p>
+                <div class="control">
+                    <textarea class="textarea" name="content" rows="10" required></textarea>
+                </div>
+            </div>
+            
+            <div class="field is-grouped">
+                <div class="control">
+                    <button type="submit" class="button is-primary">
+                        Add Template
+                    </button>
+                </div>
+                <div class="control">
+                    <button type="button" id="cancel-add-template" class="button is-light">
+                        Cancel
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+    
+    <!-- Templates List -->
+    <div class="box">
+        <h3 class="title is-5">
+            <span class="icon"><i class="fas fa-file-alt"></i></span>
+            Existing Templates
+        </h3>
+        
+        {% if templates %}
+            <div class="tabs">
+                <ul id="category-tabs">
+                    <li class="is-active"><a data-category="all">All Categories</a></li>
+                    {% for category in categories %}
+                        <li><a data-category="{{ category.id }}">{{ category.name }}</a></li>
+                    {% endfor %}
+                </ul>
+            </div>
+            
+            <div class="templates-list">
+                {% for template in templates %}
+                    <div class="template-item card mb-3" data-category="{{ template.category_id }}">
+                        <div class="card-content">
+                            <div class="is-flex is-justify-content-space-between is-align-items-center mb-2">
+                                <div class="is-flex is-align-items-center">
+                                    <p class="title is-6 mb-0 mr-2">{{ template.name }}</p>
+                                    <span class="tag is-info is-light">{{ template.category_name }}</span>
+                                </div>
+                                <div class="buttons are-small">
+                                    <button class="button is-info" onclick="editTemplate({{ template.id }})">
+                                        <span class="icon"><i class="fas fa-edit"></i></span>
+                                    </button>
+                                    <button class="button is-danger" onclick="deleteTemplate({{ template.id }}, '{{ template.name }}')">
+                                        <span class="icon"><i class="fas fa-trash"></i></span>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="content">
+                                <pre class="template-preview">{{ template.content }}</pre>
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="notification is-info is-light">
+                No templates found. Add your first template using the form above.
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Edit Template Modal -->
+<div class="modal" id="edit-template-modal">
+    <div class="modal-background"></div>
+    <div class="modal-card">
+        <header class="modal-card-head">
+            <p class="modal-card-title">Edit Template</p>
+            <button class="delete" aria-label="close" onclick="closeEditModal()"></button>
+        </header>
+        <form method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="template_id" id="edit-template-id">
+            <section class="modal-card-body">
+                <div class="field">
+                    <label class="label">Template Name</label>
+                    <div class="control">
+                        <input class="input" type="text" name="name" id="edit-template-name" required>
+                    </div>
+                </div>
+                
+                <div class="field">
+                    <label class="label">Category</label>
+                    <div class="control">
+                        <div class="select is-fullwidth">
+                            <select name="category_id" id="edit-template-category" required>
+                                <option value="">-- Select Category --</option>
+                                {% for category in categories %}
+                                    <option value="{{ category.id }}">{{ category.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="field">
+                    <label class="label">Template Content</label>
+                    <div class="control">
+                        <textarea class="textarea" name="content" id="edit-template-content" rows="10" required></textarea>
+                    </div>
+                </div>
+            </section>
+            <footer class="modal-card-foot">
+                <button type="submit" class="button is-primary">Save Changes</button>
+                <button type="button" class="button" onclick="closeEditModal()">Cancel</button>
+            </footer>
+        </form>
+    </div>
+</div>
+
+<!-- Manage Categories Modal -->
+<div class="modal" id="category-modal">
+    <div class="modal-background"></div>
+    <div class="modal-card">
+        <header class="modal-card-head">
+            <p class="modal-card-title">Manage Categories</p>
+            <button class="delete" aria-label="close" onclick="closeCategoryModal()"></button>
+        </header>
+        <section class="modal-card-body">
+            <div class="field">
+                <label class="label">Add New Category</label>
+                <div class="field has-addons">
+                    <div class="control is-expanded">
+                        <input id="new-category-name" class="input" type="text" placeholder="Category Name">
+                    </div>
+                    <div class="control">
+                        <button id="add-category-btn" class="button is-primary">Add</button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="mt-4">
+                <label class="label">Existing Categories</label>
+                <table class="table is-fullwidth is-striped">
+                    <thead>
+                        <tr>
+                            <th>Category</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="categories-table-body">
+                        {% for category in categories %}
+                        <tr data-category-id="{{ category.id }}">
+                            <td>{{ category.name }}</td>
+                            <td>
+                                <button class="button is-small is-danger" 
+                                        onclick="deleteCategory({{ category.id }}, '{{ category.name }}')"
+                                        {% if category.has_templates %}disabled title="Category has templates"{% endif %}>
+                                    <span class="icon is-small">
+                                        <i class="fas fa-trash"></i>
+                                    </span>
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+        <footer class="modal-card-foot">
+            <button class="button" onclick="closeCategoryModal()">Close</button>
+        </footer>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Show/hide add template form
+    document.getElementById('show-add-template-btn').addEventListener('click', function() {
+        document.getElementById('add-template-form').style.display = 'block';
+        this.style.display = 'none';
+        document.querySelector('textarea[name="content"]').focus();
+    });
+    
+    document.getElementById('cancel-add-template').addEventListener('click', function() {
+        document.getElementById('add-template-form').style.display = 'none';
+        document.getElementById('show-add-template-btn').style.display = 'inline-flex';
+    });
+    
+    // Category filter tabs
+    document.querySelectorAll('#category-tabs li a').forEach(tab => {
+        tab.addEventListener('click', function() {
+            // Remove active class from all tabs
+            document.querySelectorAll('#category-tabs li').forEach(item => {
+                item.classList.remove('is-active');
+            });
+            
+            // Add active class to clicked tab
+            this.parentElement.classList.add('is-active');
+            
+            // Filter templates by category
+            const categoryId = this.getAttribute('data-category');
+            const templates = document.querySelectorAll('.template-item');
+            
+            templates.forEach(template => {
+                if (categoryId === 'all' || template.getAttribute('data-category') === categoryId) {
+                    template.style.display = 'block';
+                } else {
+                    template.style.display = 'none';
+                }
+            });
+        });
+    });
+    
+    // Edit template
+    function editTemplate(id) {
+        fetch(`/admin/templates/${id}`)
+            .then(response => response.json())
+            .then(template => {
+                document.getElementById('edit-template-id').value = template.id;
+                document.getElementById('edit-template-name').value = template.name;
+                document.getElementById('edit-template-category').value = template.category_id;
+                document.getElementById('edit-template-content').value = template.content;
+                document.getElementById('edit-template-modal').classList.add('is-active');
+            })
+            .catch(error => console.error('Error fetching template:', error));
+    }
+    
+    function closeEditModal() {
+        document.getElementById('edit-template-modal').classList.remove('is-active');
+    }
+    
+    // Delete template
+    function deleteTemplate(id, name) {
+        if (confirm(`Are you sure you want to delete the template "${name}"?`)) {
+            fetch('/admin/templates/', {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token() }}'
+                },
+                body: JSON.stringify({ template_id: id })
+            })
+            .then(response => {
+                if (response.ok) {
+                    window.location.reload();
+                } else {
+                    alert('Failed to delete template');
+                }
+            })
+            .catch(error => {
+                console.error('Error deleting template:', error);
+                alert('An error occurred while deleting the template');
+            });
+        }
+    }
+    
+    // Category management
+    document.getElementById('manage-categories-btn').addEventListener('click', function() {
+        document.getElementById('category-modal').classList.add('is-active');
+    });
+    
+    function closeCategoryModal() {
+        document.getElementById('category-modal').classList.remove('is-active');
+    }
+    
+    document.getElementById('add-category-btn').addEventListener('click', function() {
+        const categoryName = document.getElementById('new-category-name').value.trim();
+        if (!categoryName) return;
+        
+        fetch('/admin/template-categories', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token() }}'
+            },
+            body: JSON.stringify({ name: categoryName })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                window.location.reload();
+            } else {
+                alert(data.error || 'Failed to add category');
+            }
+        })
+        .catch(error => {
+            console.error('Error adding category:', error);
+            alert('An error occurred while adding the category');
+        });
+    });
+    
+    function deleteCategory(id, name) {
+        const doDelete = async (force = false) => {
+            try {
+                const response = await fetch('/admin/template-categories', {
+                    method: 'DELETE',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': '{{ csrf_token() }}'
+                    },
+                    body: JSON.stringify({ 
+                        category_id: id,
+                        force_delete: force 
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    window.location.reload();
+                } else if (!force && data.error && data.error.includes('templates')) {
+                    if (confirm(`${data.error}. Would you like to force delete this category? The templates will be moved to uncategorized.`)) {
+                        await doDelete(true);
+                    }
+                } else {
+                    alert(data.error || 'Failed to delete category');
+                }
+            } catch (error) {
+                console.error('Error deleting category:', error);
+                alert('An error occurred while deleting the category');
+            }
+        };
+
+        if (confirm(`Are you sure you want to delete the category "${name}"?`)) {
+            doDelete();
+        }
+    }
+</script>
+
+<style>
+    .template-preview {
+        background: #f7fafc;
+        padding: 1rem;
+        border-radius: 4px;
+        white-space: pre-wrap;
+        font-family: 'Inter', sans-serif;
+        font-size: 0.9rem;
+        color: #4a5568;
+        line-height: 1.2;  /* Reduce line height in preview */
+        max-height: 200px;
+        overflow-y: auto;
+    }
+    #add-template-form {
+        transition: all 0.3s ease;
+    }
+    .tabs + .templates-list {
+        margin-top: 1rem;
+    }
+    .category-badge {
+        font-size: 0.7rem;
+        padding: 0.2rem 0.5rem;
+        border-radius: 999px;
+        background: #e2e8f0;
+        color: #4a5568;
+        margin-left: 0.5rem;
+    }
+</style>
+{% endblock %}
