@@ -1,9 +1,10 @@
-from app import app, db, extract_patient_info
+from app import app, db
 from models import Ward, Patient
 import os
 from datetime import datetime
 from sqlalchemy import text
 import re
+from initialize_database import parse_pdf_content  # Import the function from initialize_database
 
 def process_ward_pdfs():
     """Process existing ward PDFs and update database tables"""
@@ -52,7 +53,7 @@ def process_ward_pdfs():
                     print(f"Updated existing ward record: {display_name}")
                 
                 # Extract patient data from PDF
-                patient_data = extract_patient_info(pdf_filename)
+                patient_data = parse_pdf_content(pdf_filename)
                 print(f"Found {len(patient_data)} patients in {pdf_filename}")
                 
                 # Create or update patient records

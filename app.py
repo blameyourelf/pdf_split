@@ -63,7 +63,8 @@ app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 # Main database for users
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
 app.config['SQLALCHEMY_BINDS'] = {
-    'audit': 'sqlite:///audit.db'
+    'audit': 'sqlite:///audit.db',
+    'pdf_parsed': 'sqlite:///pdf_parsed.db'  # Add pdf_parsed database binding
 }
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
@@ -570,9 +571,12 @@ def patient(patient_id):
     # Add care notes with proper formatting
     for care_note in care_notes:
         care_dict = care_note.to_dict()
-        # Get the username of who wrote the note
-        user = User.query.get(care_note.user_id)
-        care_dict['staff'] = user.username if user else 'Unknown'
+        # Use the imported staff_name if present; otherwise fallback to the related user's username
+        if care_note.staff_name and care_note.staff_name.strip():
+            care_dict['staff'] = care_note.staff_name
+        else:
+            user = User.query.get(care_note.user_id)
+            care_dict['staff'] = user.username if user else 'Unknown'
         care_dict['date'] = care_dict['timestamp']  # Use timestamp as date
         if not care_note.is_pdf_note:
             care_dict['is_new'] = True
@@ -866,6 +870,8 @@ def admin_notes():
             'note': note.note,
             'ward': ward_name,
             'username': username_display,
+            # Added staff_name to ensure it is passed in the JSON response:
+            'staff_name': note.staff_name
         })
     
     return render_template('admin_notes.html',
@@ -1127,7 +1133,8 @@ def check_session_timeout():
 
 @app.route('/admin/timeout_settings', methods=['POST'])
 @login_required
-def update_timeout_settings():
+def admin_timeout_settings():  # Changed function name to avoid conflict
+    """Handle admin timeout settings updates"""
     if current_user.role != 'admin':
         flash('Access denied')
         return redirect(url_for('index'))
@@ -1480,6 +1487,58 @@ def manage_template_categories():
         db.session.delete(category)
         db.session.commit()
         return jsonify({"success": True})
+
+@app.route('/update_timeout_settings_v2', methods=['POST'])  # Changed route name
+@login_required
+def update_timeout_settings_v2():  # Changed function name
+    # Only admins can access this function
+    if current_user.role != 'admin':
+        flash('Access denied')
+        return redirect(url_for('index'))
+    
+    try:
+        # Get form values
+        timeout_enabled = request.form.get('timeout_enabled') is not None
+        timeout_minutes = request.form.get('timeout_minutes', '30')
+        
+        # Save settings
+        Settings.set_setting('timeout_enabled', str(timeout_enabled).lower())
+        Settings.set_setting('timeout_minutes', timeout_minutes)
+        
+        # Log this change
+        log_access('update_timeout', f'Updated timeout settings by {current_user.username}')
+        
+        flash('Session timeout settings updated', 'success')
+    except Exception as e:
+        db.session.rollback()
+        log_access('update_timeout_error', f'Error updating timeout settings by {current_user.username}: {str(e)}')
+        flash(f'Error updating timeout settings: {str(e)}', 'danger')
+    
+    return redirect(url_for('admin_notes'))
+
+@app.route('/load_more_notes/<patient_id>/<int:offset>')
+@login_required
+def load_more_notes(patient_id, offset):
+    """API endpoint to load additional care notes for a patient, including staff_name field."""
+    # Load the next 20 care notes for the given patient_id ordered by timestamp descending
+    care_notes = CareNote.query.filter_by(patient_id=patient_id)\
+                    .order_by(CareNote.timestamp.desc())\
+                    .offset(offset)\
+                    .limit(20)\
+                    .all()
+    notes_data = []
+    for note in care_notes:
+        # Prefer the staff_name from the note; if not present, try to get the username from the related user.
+        staff = note.staff_name if note.staff_name else (User.query.get(note.user_id).username if note.user_id else 'Unknown')
+        note_dict = {
+            'date': note.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
+            'staff_name': note.staff_name,  # Directly included to be used by client-side code
+            'staff': staff,
+            'note': note.note,
+            'is_new': not note.is_pdf_note
+        }
+        notes_data.append(note_dict)
+    return jsonify({'notes': notes_data})
 
 if __name__ == '__main__':
     with app.app_context():

@@ -120,18 +120,20 @@ def get_timeout_minutes():
         return 30  # Default if the setting isn't a valid number
 
 class CareNote(db.Model):
-    """Model for care notes added to patients during downtime"""
-    __table_args__ = {'extend_existing': True}
+    __tablename__ = 'care_note'
     id = db.Column(db.Integer, primary_key=True)
-    patient_id = db.Column(db.String(50), nullable=False)  # External patient ID
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    note = db.Column(db.Text, nullable=False)  # Actual note content
+    patient_id = db.Column(db.String(100), db.ForeignKey('patient.hospital_id'))
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    note = db.Column(db.Text)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
-    ward_id = db.Column(db.String(50))  # Ward where the note was added
-    patient_name = db.Column(db.String(100))  # Store patient name for efficiency
-    is_pdf_note = db.Column(db.Boolean, default=False)  # Flag to indicate if note is from PDF or manually added
+    ward_id = db.Column(db.String(50))
+    patient_name = db.Column(db.String(100))
+    # Add staff_name field for imported notes from PDFs
+    staff_name = db.Column(db.String(100))
+    is_pdf_note = db.Column(db.Boolean, default=False)
     
-    user = db.relationship('User', backref=db.backref('care_notes', lazy=True))
+    # Existing relationships
+    user = db.relationship('User', backref='care_notes')
     
     def to_dict(self):
         # Include is_pdf_note in the dictionary output

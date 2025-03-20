@@ -292,7 +292,14 @@
                 
                 // Staff column
                 const staffCell = document.createElement('td');
-                staffCell.textContent = note.staff;
+                // Use staff_name if available (for PDF imported notes), otherwise use username
+                if (note.staff_name) {
+                    staffCell.textContent = note.staff_name;
+                } else if (note.staff) {
+                    staffCell.textContent = note.staff;
+                } else {
+                    staffCell.textContent = note.username || 'Unknown';
+                }
                 row.appendChild(staffCell);
                 
                 // Note column
@@ -422,7 +429,14 @@
         
         // Staff column
         const staffCell = document.createElement('td');
-        staffCell.textContent = note.staff || 'N/A';
+        // Use staff_name if available (for PDF imported notes), otherwise use username
+        if (note.staff_name) {
+            staffCell.textContent = note.staff_name;
+        } else if (note.staff) {
+            staffCell.textContent = note.staff;
+        } else {
+            staffCell.textContent = note.username || 'Unknown';
+        }
         
         // Note column
         const noteCell = document.createElement('td');

@@ -56,6 +56,9 @@ def initialize_system():
             db.session.add(nurse)
             db.session.commit()
             
+            # Confirm admin user creation
+            print("\nAdmin user 'admin' created with password 'admin123'")
+            
             # Initialize settings
             print("\n4. Initializing system settings...")
             settings = {
