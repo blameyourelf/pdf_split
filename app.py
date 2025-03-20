@@ -1185,6 +1185,24 @@ def handle_exception(e):
         db.session.rollback()
     return render_template('500.html'), 500
 
+@app.errorhandler(404)
+def page_not_found(e):
+    """Enhanced 404 handler with debug information for admins"""
+    error_details = {
+        'path': request.path,
+        'method': request.method,
+        'args': dict(request.args),
+        'referrer': request.referrer,
+        'user_agent': request.user_agent.string,
+    }
+    
+    # Log the detailed error info
+    app.logger.error(f"404 Error: {request.path} - Details: {error_details}")
+    
+    # Return the 404 template with extra info for admins
+    return render_template('404.html', 
+                          error_details=error_details if current_user.is_authenticated and getattr(current_user, 'role', '') == 'admin' else None), 404
+
 # Enhance database error handling in our routes
 def safe_commit():
     """Safely commit database changes with error logging"""
