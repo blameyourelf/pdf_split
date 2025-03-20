@@ -894,28 +894,29 @@ def admin_notes():
 @app.route('/admin/notes/export/<format>')
 @login_required
 def export_notes(format):
+    """Export notes in the chosen format, filtering out PDF-imported notes"""
     # Only admins can access this feature
     if current_user.role != 'admin':
         flash('Access denied')
         return redirect(url_for('index'))
     
-    # Get filter parameters with explicit empty defaults
+    # Get filter parameters
     ward_id = request.args.get('ward', '')
     username = request.args.get('username', '')
     date_from = request.args.get('date_from', '')
     date_to = request.args.get('date_to', '')
     
-    # Build query with filters
-    query = CareNote.query
+    # Start building the query with is_pdf_note=False filter to exclude PDF imported notes
+    query = CareNote.query.filter(CareNote.is_pdf_note == False)
     
-    # Apply user filter by username
+    # Apply username filter
     if username:
         matching_users = User.query.filter(User.username.like(f'%{username}%')).all()
         filtered_user_ids = [u.id for u in matching_users]
         if filtered_user_ids:
             query = query.filter(CareNote.user_id.in_(filtered_user_ids))
         else:
-            query = query.filter(CareNote.id < 0)
+            query = query.filter(CareNote.id < 0)  # Empty result if no matching users
     
     # Apply date filters
     if date_from:
@@ -927,7 +928,7 @@ def export_notes(format):
     if date_to:
         try:
             date_to_obj = datetime.strptime(date_to, '%Y-%m-%d')
-            date_to_obj = date_to_obj.replace(hour=23, minute=59, second=59)  # Fixed syntax error here
+            date_to_obj = date_to_obj.replace(hour=23, minute=59, second=59)  # Set to end of day
             query = query.filter(CareNote.timestamp <= date_to_obj)
         except ValueError:
             pass
