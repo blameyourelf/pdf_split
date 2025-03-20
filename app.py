@@ -411,10 +411,14 @@ def profile():
         db.session.commit()
         flash('Default ward updated successfully', 'success')
         return redirect(url_for('profile'))
-    wards = get_ward_metadata()
+    # Convert the list of Ward objects to a dictionary with ward_number as key
+    wards_list = get_ward_metadata()
+    wards_dict = {ward.ward_number: {'display_name': ward.display_name,
+                                     'pdf_file': ward.pdf_file,
+                                     'last_updated': ward.last_updated} for ward in wards_list}
     return render_template('profile.html', 
-                         wards=wards,
-                         current_ward=current_user.default_ward)
+                           wards=wards_dict,
+                           current_ward=current_user.default_ward)
 
 @app.route('/ward/<ward_num>')
 @login_required
@@ -768,8 +772,8 @@ def admin_notes():
     date_to = request.args.get('date_to', '')
     page = request.args.get('page', 1, type=int)
     
-    # Build query with filters
-    query = CareNote.query
+    # Build query with filters; add filter to only include manually added notes (is_pdf_note False)
+    query = CareNote.query.filter(CareNote.is_pdf_note == False)
     
     # Track whether any filters are applied
     filters_applied = False
@@ -823,10 +827,8 @@ def admin_notes():
         users_map = {user.id: user.username for user in users}
     
     # Get ward display names for dropdown
-    available_wards = {}
-    for ward_id in wards_data.keys():
-        # Store the ward info dictionary, not just the display name
-        available_wards[ward_id] = wards_data[ward_id]
+    wards_list = get_ward_metadata()
+    available_wards = {ward.ward_number: {'display_name': ward.display_name} for ward in wards_list}
     
     # Sort wards alphabetically by display name for better UX
     # Fix: the lambda now properly handles both dictionary and string values
@@ -1447,8 +1449,8 @@ def manage_template_categories():
         if not name:
             return jsonify({"success": False, "error": "Category name is required"}), 400
         
-        # Check if category already exists
-        existing = TemplateCategory.query.filter_by(name(name)).first()
+        # Fix: Use name=name, not name(name)
+        existing = TemplateCategory.query.filter_by(name=name).first()
         if existing:
             return jsonify({"success": False, "error": "Category already exists"}), 400
         
@@ -1539,6 +1541,79 @@ def load_more_notes(patient_id, offset):
         }
         notes_data.append(note_dict)
     return jsonify({'notes': notes_data})
+
+# -------------------------
+# New endpoints for user management (edit and remove users)
+# -------------------------
+
+@app.route('/admin/edit_user', methods=['POST'])
+@login_required
+def admin_edit_user():
+    """Endpoint to edit a user's role and optionally their username.
+       Only accessible to admin users."""
+    if current_user.role != 'admin':
+        flash('Access denied', 'danger')
+        return redirect(url_for('admin_users'))
+    
+    user_id = request.form.get('user_id')
+    new_role = request.form.get('role')
+    new_username = request.form.get('username')  # Optional update
+
+    if not user_id or not new_role:
+        flash('User ID and new role are required', 'danger')
+        return redirect(url_for('admin_users'))
+    
+    user = User.query.get(user_id)
+    if not user:
+        flash('User not found', 'danger')
+        return redirect(url_for('admin_users'))
+    
+    # Update fields
+    if new_username:
+        user.username = new_username
+    user.role = new_role
+
+    try:
+        db.session.commit()
+        flash(f'User "{user.username}" updated successfully', 'success')
+        log_access('edit_user', f'Edited user: {user.username}')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error updating user: {str(e)}', 'danger')
+    
+    return redirect(url_for('admin_users'))
+
+@app.route('/admin/remove_user/<int:user_id>', methods=['POST'])
+@login_required
+def admin_remove_user(user_id):
+    """Soft-delete a user (mark as inactive) without removing their notes or audit logs.
+       Only accessible to admin users and prevents removal of self."""
+    if current_user.role != 'admin':
+        flash('Access denied', 'danger')
+        return redirect(url_for('admin_users'))
+    
+    if user_id == current_user.id:
+        flash("You cannot remove your own account", 'danger')
+        return redirect(url_for('admin_users'))
+    
+    user = User.query.get(user_id)
+    if not user:
+        flash('User not found', 'danger')
+        return redirect(url_for('admin_users'))
+    
+    try:
+        # Instead of deleting the user, mark them as inactive (soft delete)
+        user.is_active = False  # Assumes the User model supports an is_active flag
+        # Optionally, update the username to indicate removal without losing historical reference
+        user.username = f"{user.username} (deleted)"
+        db.session.commit()
+        flash(f'User "{user.username}" removed (deactivated) successfully', 'success')
+        log_access('remove_user', f'Removed (deactivated) user: {user.username}')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error removing user: {str(e)}', 'danger')
+    
+    return redirect(url_for('admin_users'))
 
 if __name__ == '__main__':
     with app.app_context():

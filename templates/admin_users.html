@@ -160,14 +160,20 @@
                                     </span>
                                 </td>
                                 <td>{{ user.default_ward or 'None' }}</td>
+                                <!-- New Actions column with Edit and Remove buttons -->
                                 <td>
-                                    <button class="button is-small" 
-                                            onclick="showResetPasswordModal('{{ user.username }}', {{ user.id }})">
-                                        <span class="icon is-small">
-                                            <i class="fas fa-key"></i>
-                                        </span>
-                                        <span>Reset Password</span>
+                                    <!-- Edit button triggers JavaScript modal -->
+                                    <button type="button" class="button is-small is-info" onclick="showEditUserModal('{{ user.id }}', '{{ user.username }}', '{{ user.role }}')">
+                                        <span class="icon is-small"><i class="fas fa-edit"></i></span>
+                                        <span>Edit</span>
                                     </button>
+                                    <!-- Remove button submits a POST to the removal endpoint -->
+                                    <form method="POST" action="{{ url_for('admin_remove_user', user_id=user.id) }}" style="display:inline;">
+                                        <button type="submit" class="button is-small is-danger" onclick="return confirm('Are you sure you want to remove this user?');">
+                                            <span class="icon is-small"><i class="fas fa-trash"></i></span>
+                                            <span>Remove</span>
+                                        </button>
+                                    </form>
                                 </td>
                             </tr>
                         {% endfor %}
@@ -208,6 +214,44 @@
         </div>
     </div>
 
+    <!-- Add Edit User Modal at the end of the file, before the closing </body> tag -->
+    <div class="modal" id="edit-user-modal">
+        <div class="modal-background"></div>
+        <div class="modal-card">
+            <header class="modal-card-head">
+                <p class="modal-card-title">Edit User</p>
+                <button class="delete" aria-label="close" onclick="closeEditUserModal()"></button>
+            </header>
+            <section class="modal-card-body">
+                <form id="edit-user-form" method="POST" action="{{ url_for('admin_edit_user') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="user_id" id="edit-user-id">
+                    <div class="field">
+                        <label class="label">Username</label>
+                        <div class="control">
+                            <input class="input" type="text" name="username" id="edit-username" placeholder="Enter new username (optional)">
+                        </div>
+                    </div>
+                    <div class="field">
+                        <label class="label">Role</label>
+                        <div class="control">
+                            <div class="select is-fullwidth">
+                                <select name="role" id="edit-role">
+                                    <option value="user">Regular User</option>
+                                    <option value="admin">Administrator</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </section>
+            <footer class="modal-card-foot">
+                <button class="button is-primary" onclick="submitEditUserForm()">Save Changes</button>
+                <button class="button" onclick="closeEditUserModal()">Cancel</button>
+            </footer>
+        </div>
+    </div>
+
     <script>
         function showResetPasswordModal(username, userId) {
             document.getElementById('reset-username').textContent = username;
@@ -217,6 +261,24 @@
 
         function closeResetPasswordModal() {
             document.getElementById('reset-password-modal').classList.remove('is-active');
+        }
+
+        // Function to display the Edit User modal and pre-fill the form
+        function showEditUserModal(userId, username, role) {
+            document.getElementById('edit-user-id').value = userId;
+            document.getElementById('edit-username').value = username;
+            document.getElementById('edit-role').value = role;
+            document.getElementById('edit-user-modal').classList.add('is-active');
+        }
+
+        // Function to close the Edit User modal
+        function closeEditUserModal() {
+            document.getElementById('edit-user-modal').classList.remove('is-active');
+        }
+
+        // Function to submit the Edit User form
+        function submitEditUserForm() {
+            document.getElementById('edit-user-form').submit();
         }
     </script>
 </body>

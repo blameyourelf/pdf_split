@@ -121,7 +121,7 @@
                     <button class="delete" aria-label="close" onclick="closeTimeoutModal()"></button>
                 </header>
                 <section class="modal-card-body">
-                    <form id="timeout-form" method="POST" action="{{ url_for('update_timeout_settings') }}">
+                    <form id="timeout-form" method="POST" action="{{ url_for('update_timeout_settings_v2') }}">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <div class="field">
                             <label class="label">Enable Session Timeout</label>
