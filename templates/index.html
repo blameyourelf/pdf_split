@@ -43,44 +43,35 @@
         .ward-card {
             background: white;
             border-radius: 8px;
-            padding: 1rem;
-            text-align: center;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-            transition: all 0.3s ease;
-            cursor: pointer;
+            padding: 1.5rem;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            transition: all 0.2s ease;
             text-decoration: none;
             color: inherit;
-            position: relative;
-            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            border-top: 4px solid #4299e1;
         }
         .ward-card:hover {
             transform: translateY(-2px);
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            background-color: #ebf8ff;
-        }
-        .ward-card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 4px;
-            background: #4299e1;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
         }
         .ward-icon {
-            font-size: 1.5rem;
+            font-size: 2rem;
             color: #4299e1;
-            margin-bottom: 0.5rem;
+            margin-bottom: 1rem;
         }
         .ward-title {
-            font-size: 1.1rem;
+            font-size: 1.25rem;
             font-weight: 600;
             color: #2d3748;
-            margin-bottom: 0.25rem;
+            margin-bottom: 0.5rem;
         }
-        .ward-info {
+        .ward-subtitle {
+            font-size: 1rem;
             color: #718096;
-            font-size: 0.8rem;
         }
         .navbar {
             background: white;
@@ -206,6 +197,12 @@
         .recent-patient-item:hover {
             background-color: #f7fafc;
         }
+        .ward-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 1.25rem;
+            margin-top: 1.5rem;
+        }
     </style>
     <script>
         async function searchWards() {
@@ -298,7 +295,9 @@
     {% block content %}
     <div class="container">
         <h1 class="title">Contingency EPR Digital Notes Viewer</h1>
-        <p class="subtitle">Select a Ward to View Patient Records</p>
+        <p class="subtitle">Select a Ward to View Patient Records<br>
+           <small class="has-text-grey-light mt-1">Last updated: {{ wards[0].last_updated.strftime("%Y-%m-%d %H:%M:%S") if wards else "Unknown" }}</small>
+        </p>
 
         <div class="recent-patients">
             <button type="button" class="recent-patients-button" onclick="toggleRecentPatients()">
@@ -339,18 +338,18 @@
         </div>
         {% endif %}
 
-        <div class="ward-grid">
-            {% for ward_num, ward_info in wards.items() %}
-            <a href="/ward/{{ ward_num }}" class="ward-card" data-ward="{{ ward_num }}">
+        <div class="ward-cards">
+            {% for ward in wards %}
+            <a href="/ward/{{ ward.ward_number }}" class="ward-card" data-ward="{{ ward.ward_number }}">
                 <div class="ward-icon">
                     <i class="fas fa-hospital-user"></i>
                 </div>
-                <h2 class="ward-title">
-                    {{ ward_info.display_name }}
-                </h2>
-                <p class="ward-info">
-                    <small>{{ ward_info.filename }}</small>
-                </p>
+                <div class="ward-card-content">
+                    <h2 class="ward-title">{{ ward.display_name }}</h2>
+                    <p class="ward-subtitle">
+                        {{ patient_counts.get(ward.ward_number, 0) }} Patients
+                    </p>
+                </div>
             </a>
             {% endfor %}
         </div>

@@ -99,6 +99,59 @@
         padding: 0 2px;
         border-radius: 2px;
     }
+    /* Add this new style to control the width of the notes column */
+    .care-notes-table td:nth-child(4) {
+        /* The fourth column is the Notes column */
+        max-width: 42rem; /* ~672px at default font size, good for readability */
+        width: 42rem;
+    }
+    
+    /* Style for the note content to ensure it wraps properly */
+    .note-text {
+        line-height: 1.5;
+        white-space: normal;
+        /* Ensure text doesn't overflow */
+        overflow-wrap: break-word;
+        word-wrap: break-word;
+        hyphens: auto;
+    }
+    
+    /* On mobile screens, allow notes to take full width */
+    @media (max-width: 768px) {
+        .care-notes-table td:nth-child(4) {
+            max-width: none;
+            width: auto;
+        }
+    }
+    
+    /* Container style to better center the content */
+    .patient-content {
+        max-width: 1200px;
+        margin: 0 auto;
+    }
+
+    /* Adjust column widths for date and time to reduce extra spacing */
+    .care-notes-table th:nth-child(1), 
+    .care-notes-table td:nth-child(1) {
+        width: 90px; /* Reduce date column width from default */
+        min-width: 90px;
+        max-width: 90px;
+    }
+
+    .care-notes-table th:nth-child(2), 
+    .care-notes-table td:nth-child(2) {
+        width: 70px; /* Reduce time column width from default */
+        min-width: 70px;
+        max-width: 70px;
+    }
+
+    /* Make sure staff member column doesn't get too wide */
+    .care-notes-table th:nth-child(3), 
+    .care-notes-table td:nth-child(3) {
+        width: 120px;
+        min-width: 120px;
+        max-width: 150px;
+    }
 </style>
 {% endblock %}
 
@@ -187,10 +240,12 @@
             </div>
         </div>
 
+        <!-- First, let's update the table header to separate date and time into two columns -->
         <table class="care-notes-table" id="care-notes-table">
             <thead>
                 <tr>
-                    <th>Date & Time</th>
+                    <th>Date</th>
+                    <th>Time</th>
                     <th>Staff Member</th>
                     <th>Notes</th>
                 </tr>
@@ -200,22 +255,14 @@
             </tbody>
         </table>
 
-        {% if has_more_notes %}
-        <div class="has-text-centered mt-4">
-            <button id="load-more-btn" class="button is-info is-light" onclick="loadMoreNotes(50)">
-                <span class="icon">
-                    <i class="fas fa-plus"></i>
+        <div id="auto-loading-indicator" class="has-text-centered mt-4" style="display: none;">
+            <div class="is-flex is-justify-content-center">
+                <span class="icon is-medium mr-2">
+                    <i class="fas fa-spinner fa-pulse"></i>
                 </span>
-                <span>Load More Notes</span>
-            </button>
-            <div id="loading-more" class="mt-2" style="display: none;">
-                <span class="icon">
-                    <i class="fas fa-spinner fa-spin"></i>
-                </span>
-                Loading more notes...
+                <span>Loading additional notes...</span>
             </div>
         </div>
-        {% endif %}
     </div>
 </div>
 
@@ -290,6 +337,11 @@
                 dateCell.textContent = note.date;
                 row.appendChild(dateCell);
                 
+                // Time column
+                const timeCell = document.createElement('td');
+                timeCell.textContent = note.time;
+                row.appendChild(timeCell);
+                
                 // Staff column
                 const staffCell = document.createElement('td');
                 // Use staff_name if available (for PDF imported notes), otherwise use username
@@ -302,12 +354,21 @@
                 }
                 row.appendChild(staffCell);
                 
-                // Note column
+                // Note column - simplified handling with consistent formatting
                 const noteCell = document.createElement('td');
-                noteCell.textContent = note.note;
+                if (note.note) {
+                    // Process all notes with a simple paragraph-based approach
+                    // Replace all newlines with <br> tags - this preserves all breaks
+                    // but allows the text to flow within the container
+                    noteCell.innerHTML = note.note.replace(/\n/g, '<br>');
+                    noteCell.className = 'note-text';
+                } else {
+                    noteCell.textContent = '';
+                    noteCell.className = 'note-text';
+                }
+                
                 row.appendChild(noteCell);
                 
-                // Add to table
                 tableBody.appendChild(row);    
             });
             
@@ -361,15 +422,32 @@
         }
     }
 
+    // Modified approach: Load 20 notes immediately, then load the rest automatically
     document.addEventListener('DOMContentLoaded', function() {
         // Display first 20 notes immediately for quick initial render
         const allNotes = {{ care_notes|tojson }};
+        
+        // First add the initial notes for quick page load
         displayInitialNotes(allNotes.slice(0, 20));
         
-        // Load the rest of the notes after a slight delay using animation frames
-        setTimeout(() => {
-            requestAnimationFrame(() => loadRemainingNotes(allNotes, 20));
-        }, 100);
+        // Then load the rest automatically after a slight delay to ensure good initial load
+        if (allNotes.length > 20) {
+            setTimeout(() => {
+                console.log("Loading remaining notes...");
+                requestAnimationFrame(() => loadRemainingNotes(allNotes, 20));
+            }, 500); // Small delay to ensure initial content is interactive first
+        }
+        
+        // Load templates into the dropdown when the modal is opened
+        loadNoteTemplates();
+        
+        // Add event listener to the template selector
+        document.getElementById('note-template-selector').addEventListener('change', function() {
+            const selectedTemplateId = this.value;
+            if (selectedTemplateId) {
+                insertTemplateContent(selectedTemplateId);
+            }
+        });
     });
     
     function displayInitialNotes(notes) {
@@ -387,7 +465,8 @@
         
         // Process notes in batches to keep the UI responsive
         const processBatch = (index) => {
-            const endIndex = Math.min(index + 20, totalNotes);
+            const batchSize = 30; // Process 30 at a time for better performance
+            const endIndex = Math.min(index + batchSize, totalNotes);
             
             for (let i = index; i < endIndex; i++) {
                 const row = createNoteRow(allNotes[i]);
@@ -406,30 +485,58 @@
     function createNoteRow(note) {
         const row = document.createElement('tr');
         
-        // Date column - handle both formats (timestamp or date)
-        const dateCell = document.createElement('td');
+        // Format date and time for display (from either timestamp or date)
+        let dateTimeStr = '';
         if (note.timestamp) {
-            dateCell.textContent = note.timestamp;
+            dateTimeStr = note.timestamp;
         } else if (note.date) {
-            dateCell.textContent = note.date;
-        }
-
-        // Add "NEW" badge if needed
-        if (note.is_new) {
-            const badge = document.createElement('span');
-            badge.style.background = '#d1fae5';
-            badge.style.color = '#047857';
-            badge.style.padding = '0.2rem 0.5rem';
-            badge.style.borderRadius = '4px';
-            badge.style.fontSize = '0.75rem';
-            badge.textContent = 'NEW';
-            dateCell.appendChild(document.createTextNode(' '));
-            dateCell.appendChild(badge);
+            dateTimeStr = note.date;
         }
         
+        // Parse the date string (format: YYYY-MM-DD HH:MM:SS)
+        if (dateTimeStr) {
+            const dateTimeParts = dateTimeStr.split(' ');
+            if (dateTimeParts.length >= 2) {
+                const datePart = dateTimeParts[0]; // YYYY-MM-DD
+                const timePart = dateTimeParts[1]; // HH:MM:SS
+                
+                // Format date as DD-MM-YYYY
+                const dateObj = new Date(datePart);
+                const formattedDate = `${String(dateObj.getDate()).padStart(2, '0')}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${dateObj.getFullYear()}`;
+                
+                // Format time as HH:MM
+                const timeObj = new Date(`1970-01-01T${timePart}`);
+                const formattedTime = `${String(timeObj.getHours()).padStart(2, '0')}:${String(timeObj.getMinutes()).padStart(2, '0')}`;
+                
+                // Date column
+                const dateCell = document.createElement('td');
+                dateCell.textContent = formattedDate;
+                
+                // Time column
+                const timeCell = document.createElement('td');
+                timeCell.textContent = formattedTime;
+                
+                // Add "NEW" badge to the time cell if needed
+                if (note.is_new) {
+                    const badge = document.createElement('span');
+                    badge.style.background = '#d1fae5';
+                    badge.style.color = '#047857';
+                    badge.style.padding = '0.2rem 0.5rem';
+                    badge.style.borderRadius = '4px';
+                    badge.style.fontSize = '0.75rem';
+                    badge.style.marginLeft = '0.5rem';
+                    badge.textContent = 'NEW';
+                    timeCell.appendChild(badge);
+                }
+                
+                row.appendChild(dateCell);
+                row.appendChild(timeCell);
+            }
+        }
+        
+        // Rest of the function remains the same
         // Staff column
         const staffCell = document.createElement('td');
-        // Use staff_name if available (for PDF imported notes), otherwise use username
         if (note.staff_name) {
             staffCell.textContent = note.staff_name;
         } else if (note.staff) {
@@ -437,20 +544,20 @@
         } else {
             staffCell.textContent = note.username || 'Unknown';
         }
-        
-        // Note column
-        const noteCell = document.createElement('td');
-        // Handle notes with newlines by preserving formatting
-        if (note.note && note.note.includes('\n')) {
-            noteCell.innerHTML = note.note.replace(/\n/g, '<br>');
-            noteCell.style.whiteSpace = 'pre-wrap';
-        } else {
-            noteCell.textContent = note.note || '';
-        }
-
-        // Add to row
-        row.appendChild(dateCell);
         row.appendChild(staffCell);
+        
+        // Note column - simplified handling with consistent formatting
+        const noteCell = document.createElement('td');
+        if (note.note) {
+            // Process all notes with a simple paragraph-based approach
+            // Replace all newlines with <br> tags - this preserves all breaks
+            // but allows the text to flow within the container
+            noteCell.innerHTML = note.note.replace(/\n/g, '<br>');
+            noteCell.className = 'note-text';
+        } else {
+            noteCell.textContent = '';
+            noteCell.className = 'note-text';
+        }
         row.appendChild(noteCell);
         
         return row;

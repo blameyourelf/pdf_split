@@ -121,6 +121,14 @@ def get_timeout_minutes():
 
 class CareNote(db.Model):
     __tablename__ = 'care_note'
+    # Add indexes to commonly queried columns
+    __table_args__ = (
+        db.Index('idx_carenote_patient_id', 'patient_id'),
+        db.Index('idx_carenote_user_id', 'user_id'),
+        db.Index('idx_carenote_timestamp', 'timestamp'),
+        db.Index('idx_carenote_ward_id', 'ward_id'),
+        {'extend_existing': True}
+    )
     id = db.Column(db.Integer, primary_key=True)
     patient_id = db.Column(db.String(100), db.ForeignKey('patient.hospital_id'))
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
@@ -189,3 +197,4 @@ class TemplateCategory(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(50), nullable=False, unique=True)  # Category name
     is_active = db.Column(db.Boolean, default=True)  # To allow disabling without deleting
+

@@ -16,8 +16,15 @@
     <div class="header-with-actions">
         <div class="title-section">
             <h1 class="title">My Shift Notes</h1>
-            <p class="subtitle has-text-grey">Care notes you've added during downtime</p>
+            <p class="subtitle has-text-grey">
+                {% if show_all %}
+                    Showing all notes you've added during downtime
+                {% else %}
+                    Showing notes from the last 12 hours only
+                {% endif %}
+            </p>
         </div>
+        <!-- Moved button closer to title -->
         <a href="{{ url_for('my_shift_notes', show_all='1' if not show_all else '0') }}" 
            class="button {% if show_all %}is-warning{% else %}is-info{% endif %} is-light">
             <span class="icon">
@@ -30,6 +37,8 @@
     <div class="notification is-info is-light mb-4">
         <p><strong>Note:</strong> Once the main EPR system is back online, use this view to find notes you need to transfer.</p>
     </div>
+    
+    <!-- Removed redundant time range indicator -->
     
     <div class="box">
         <table class="table is-fullwidth notes-table">

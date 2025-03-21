@@ -40,6 +40,7 @@
     .patient-details {
         display: flex;
         flex-direction: column;
+        margin-left: 1rem;
     }
     .patient-id {
         font-weight: 600;
@@ -48,6 +49,11 @@
     .patient-name {
         color: #718096;
         font-size: 0.9rem;
+    }
+    .warning {
+        color: #e53e3e;
+        font-size: 0.8rem;
+        font-weight: 600;
     }
     .ward-header {
         display: flex;
@@ -92,19 +98,16 @@
 {% block content %}
 <div class="container">
     <div class="ward-header">
-        <div>
-            <h1 class="title">
-                {% if ward_num.isdigit() %}
-                    Ward {{ ward_num }}
-                {% else %}
-                    {{ ward_num }}
-                {% endif %}
-            </h1>
-            <p class="subtitle">Database Records</p>
-            <p class="subtitle" style="font-size: 0.9rem; color: #718096;">
-                Last updated: {{ pdf_creation_time }}
-            </p>
-        </div>
+        <h1 class="title">{% if ward_num.isdigit() %}Ward {{ ward_num }}{% else %}{{ ward_num }}{% endif %}</h1>
+        <p class="subtitle">
+            <span class="icon mr-1">
+                <i class="fas fa-user-injured"></i>
+            </span>
+            {{ ward_data['patients']|length }} Patients
+        </p>
+        <p class="subtitle" style="font-size: 0.9rem; color: #718096;">
+            Last updated: {{ pdf_creation_time }}
+        </p>
     </div>
     
     <div class="search-box">
@@ -173,6 +176,7 @@
         }
     }
 
+    // Update the displayPatients function to remove DOB and similar names
     function displayPatients(patients) {
         const list = document.getElementById('patient-list');
         list.innerHTML = '';

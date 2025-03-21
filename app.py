@@ -377,27 +377,43 @@ def logout_page():
 @app.route('/')
 @login_required
 def index():
-    """Modified index route to load wards directly from database"""
-    print(f"Index accessed by: {current_user.username if current_user.is_authenticated else 'Anonymous'}")
+    """Modified index route to redirect to default ward or show wards list"""
+    log_access('index', f'Index accessed by: {current_user.username}')
     
-    # Get show_all parameter
-    show_all = request.args.get('show_all') == '1'
+    # Get the show_all parameter (for users with default ward set)
+    show_all = request.args.get('show_all', '0') == '1'
     
-    # If user has default ward and not showing all, redirect to ward
+    # If user has a default ward and show_all is not specified, redirect directly to ward page
     if current_user.default_ward and not show_all:
-        return redirect(url_for('ward', ward_num=current_user.default_ward))
+        # Check if the default ward exists
+        default_ward = Ward.query.filter_by(ward_number=current_user.default_ward).first()
+        if default_ward:
+            # Redirect to the ward page directly
+            return redirect(url_for('ward', ward_num=current_user.default_ward))
     
-    # Get wards from database
-    wards = {}
-    ward_records = Ward.query.order_by(Ward.display_name).all()
+    # Otherwise, continue with the original index route
+    # Get all wards from the database
+    wards = get_ward_metadata()
     
-    for ward in ward_records:
-        wards[ward.ward_number] = {
-            'display_name': ward.display_name,
-            'filename': 'Database Record'
-        }
+    # Get patient counts for each ward
+    patient_counts = {}
+    ward_patients = db.session.query(
+        Patient.current_ward, 
+        db.func.count(Patient.id)
+    ).filter(
+        Patient.is_active == True
+    ).group_by(
+        Patient.current_ward
+    ).all()
     
-    return render_template('index.html', wards=wards, show_all=show_all)
+    # Convert to dictionary for easy lookup
+    for ward_num, count in ward_patients:
+        patient_counts[ward_num] = count
+    
+    return render_template('index.html', 
+                           wards=wards, 
+                           show_all=show_all,
+                           patient_counts=patient_counts)
 
 @app.route('/profile', methods=['GET', 'POST'])
 @login_required
@@ -437,12 +453,22 @@ def ward(ward_num):
     ).order_by(Patient.name).all()
     
     # Format patient data for template
-    patient_data = {
-        p.hospital_id: {
-            "id": p.hospital_id,
-            "name": p.name
-        } for p in patients
-    }
+    patient_data = {}
+    name_counts = {}
+    for patient in patients:
+        name = patient.name.lower()
+        if name not in name_counts:
+            name_counts[name] = 0
+        name_counts[name] += 1
+    
+    for patient in patients:
+        name = patient.name.lower()
+        patient_data[patient.hospital_id] = {
+            "id": patient.hospital_id,
+            "name": patient.name,
+            "dob": patient.dob,  # This is correctly included here
+            "similar_names": name_counts[name] > 1
+        }
     
     # Log this access
     log_access('view_ward', f'Ward {ward_num}')
@@ -451,36 +477,51 @@ def ward(ward_num):
                          ward_num=ward_num,
                          ward_data={"patients": patient_data},
                          ward_name=ward.display_name,
-                         pdf_filename="Database record", # Replace PDF filename reference
+                         pdf_filename="Database record",
                          pdf_creation_time=ward.last_updated.strftime("%Y-%m-%d %H:%M:%S") if ward.last_updated else "Unknown")
 
 @app.route('/search_ward/<ward_num>')
 @login_required
 def search_ward(ward_num):
     """Search endpoint for patients within a specific ward using database only"""
-    ward_num = unquote(ward_num)
-    search_query = request.args.get('q', '').strip().lower()
+    query = request.args.get('q', '')
     
-    # Base query for active patients in this ward
-    query = Patient.query.filter_by(
+    # Get ward from database
+    ward = Ward.query.filter_by(ward_number=ward_num).first_or_404()
+    
+    # Query database for matching patients
+    patients_query = Patient.query.filter_by(
         current_ward=ward_num, 
         is_active=True
     )
     
-    # Apply search filter if query provided
-    if search_query:
-        query = query.filter(
+    # Apply search filter if query is provided
+    if query:
+        patients_query = patients_query.filter(
             db.or_(
-                Patient.hospital_id.ilike(f'%{search_query}%'),
-                Patient.name.ilike(f'%{search_query}%')
+                Patient.hospital_id.like(f'%{query}%'),
+                Patient.name.ilike(f'%{query}%')
             )
         )
     
+    # Get all patients to find similar names
+    all_patients = patients_query.all()
+    name_counts = {}
+    for patient in all_patients:
+        name = patient.name.lower()
+        if name not in name_counts:
+            name_counts[name] = 0
+        name_counts[name] += 1
+    
     # Format results
-    results = [
-        {"id": patient.hospital_id, "name": patient.name}
-        for patient in query.order_by(Patient.name).all()
-    ]
+    results = []
+    for patient in all_patients:
+        results.append({
+            'id': patient.hospital_id,
+            'name': patient.name,
+            'dob': patient.dob,  # Make sure DOB is included
+            'similar_names': name_counts[patient.name.lower()] > 1  # Set flag for similar names
+        })
     
     return jsonify(results)
 
@@ -564,9 +605,10 @@ def patient(patient_id):
     notes = Note.query.filter_by(patient_id=patient.id)\
         .order_by(Note.timestamp.desc()).all()
     
-    # Get care notes added during downtime - MODIFY THIS SECTION
+    # Get care notes from database - load all notes but return them in JSON format
+    # This allows the UI to handle the phased loading (first 20 initially, then the rest)
     care_notes = CareNote.query.filter_by(
-        patient_id=patient_id  # Use patient_id directly since that's how we store it
+        patient_id=patient_id
     ).order_by(CareNote.timestamp.desc()).all()
 
     # Format notes for template
@@ -591,7 +633,7 @@ def patient(patient_id):
         key=lambda x: datetime.strptime(x['timestamp'], '%Y-%m-%d %H:%M:%S'), 
         reverse=True
     )
-
+    
     # Format patient info for template
     patient_info_dict = {
         "Patient ID": patient.hospital_id,
@@ -601,12 +643,17 @@ def patient(patient_id):
     }
     
     ward = Ward.query.filter_by(ward_number=patient.current_ward).first()
+    
+    # Add has_more_notes flag to indicate if pagination might be needed
+    has_more_notes = len(formatted_notes) > 20
+    
     return render_template('patient.html',
                          patient_id=patient_id,
                          patient_info_dict=patient_info_dict,
                          vitals="",  # This could be added to Patient model if needed
                          care_notes=formatted_notes,
                          ward_num=patient.current_ward,
+                         has_more_notes=has_more_notes,
                          pdf_filename=ward.pdf_file if ward else None,
                          pdf_creation_time=ward.last_updated.strftime("%Y-%m-%d %H:%M:%S") if ward and ward.last_updated else "Unknown",
                          notes_enabled=get_notes_enabled())
@@ -678,11 +725,39 @@ def toggle_notes():
     if current_user.role != 'admin':
         flash('Access denied')
         return redirect(url_for('index'))
-    current_status = get_notes_enabled()
-    new_status = not current_status
-    Settings.set_setting('notes_enabled', str(new_status).lower())
-    status = 'enabled' if new_status else 'disabled'
-    flash(f'Note-adding functionality has been {status}', 'success')
+    
+    # Optimize database access by using a single query
+    # and adding transaction optimization
+    try:
+        # Start an explicit transaction
+        current_status = get_notes_enabled()
+        new_status = not current_status
+        
+        # Find existing setting or create new one
+        setting = Settings.query.filter_by(key='notes_enabled').first()
+        if setting:
+            # Update existing setting
+            setting.value = str(new_status).lower()
+        else:
+            # Create new setting
+            setting = Settings(key='notes_enabled', value=str(new_status).lower())
+            db.session.add(setting)
+            
+        # Commit the transaction
+        db.session.commit()
+        
+        # Set appropriate message
+        status = 'enabled' if new_status else 'disabled'
+        flash(f'Note-adding functionality has been {status}', 'success')
+        
+        # Log this action
+        log_access('toggle_notes', f'Note adding {status}')
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error updating setting: {str(e)}', 'error')
+        app.logger.error(f'Error in toggle_notes: {str(e)}')
+    
     return redirect(request.referrer or url_for('admin_notes'))
 
 # Update the add_care_note route to check if notes are enabled
@@ -773,7 +848,9 @@ def admin_notes():
     page = request.args.get('page', 1, type=int)
     
     # Build query with filters; add filter to only include manually added notes (is_pdf_note False)
-    query = CareNote.query.filter(CareNote.is_pdf_note == False)
+    query = db.session.query(CareNote, User.username).outerjoin(
+        User, CareNote.user_id == User.id
+    ).filter(CareNote.is_pdf_note == False)
     
     # Track whether any filters are applied
     filters_applied = False
@@ -802,7 +879,7 @@ def admin_notes():
         filters_applied = True
         try:
             date_to_obj = datetime.strptime(date_to, '%Y-%m-%d')
-            date_to_obj = date_to_obj.replace(hour=23, minute=59, second=59)  # Fixed syntax error here
+            date_to_obj = date_to_obj.replace(hour=23, minute=59, second=59)
             query = query.filter(CareNote.timestamp <= date_to_obj)
         except ValueError:
             pass
@@ -831,7 +908,6 @@ def admin_notes():
     available_wards = {ward.ward_number: {'display_name': ward.display_name} for ward in wards_list}
     
     # Sort wards alphabetically by display name for better UX
-    # Fix: the lambda now properly handles both dictionary and string values
     available_wards = dict(sorted(
         available_wards.items(),
         key=lambda item: item[1]["display_name"].lower() if isinstance(item[1], dict) and "display_name" in item[1] else item[0].lower()
@@ -853,18 +929,21 @@ def admin_notes():
     
     # Process notes for display
     notes = []
-    for note in paginated_notes.items:
+    for note_tuple in paginated_notes.items:
+        # The note is the first element in the tuple
+        note = note_tuple[0]  # This is the CareNote object
+        username_display = note_tuple[1] or "Unknown"  # This is the User.username value
+        
         # Get ward name efficiently using our preloaded display names
-        # Fix - extract display_name from the ward_info dictionary 
         ward_info = available_wards.get(note.ward_id)
         if isinstance(ward_info, dict) and 'display_name' in ward_info:
             ward_name = ward_info['display_name']
         else:
             ward_name = note.ward_id or "Unknown"
+        
         # Use stored patient name
         patient_name = note.patient_name or "Unknown"
-        # Get username from our preloaded map
-        username_display = users_map.get(note.user_id, "Unknown")
+        
         notes.append({
             'timestamp': note.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
             'patient_id': note.patient_id,
@@ -872,7 +951,6 @@ def admin_notes():
             'note': note.note,
             'ward': ward_name,
             'username': username_display,
-            # Added staff_name to ensure it is passed in the JSON response:
             'staff_name': note.staff_name
         })
     
@@ -1238,7 +1316,7 @@ def search_ward_patients(ward_id):
     # Get patients ordered by name
     patients = base_query.order_by(Patient.name).all()
     
-    # Format results
+    # Format results - simplified to remove DOB and similar_names
     results = [{
         'id': patient.hospital_id,
         'name': patient.name or 'Unknown'
