@@ -23,7 +23,12 @@ class AuditLog(db.Model):
     timestamp = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
 class Patient(db.Model):
-    __table_args__ = {'extend_existing': True}
+    __table_args__ = (
+        db.Index('idx_patient_hospital_id', 'hospital_id'),
+        db.Index('idx_patient_current_ward', 'current_ward'),
+        db.Index('idx_patient_is_active', 'is_active'),
+        {'extend_existing': True}
+    )
     id = db.Column(db.Integer, primary_key=True)
     hospital_id = db.Column(db.String(10), unique=True, nullable=False)
     name = db.Column(db.String(100), nullable=False)
