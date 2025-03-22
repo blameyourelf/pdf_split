@@ -312,6 +312,64 @@
 
 {% block scripts %}
 <script>
+    // Improve the validation check to properly detect unedited templates
+    let originalTemplateContent = '';
+    
+    // Set up validation for the note form
+    document.addEventListener('DOMContentLoaded', function() {
+        const noteForm = document.getElementById('note-form');
+        
+        noteForm.addEventListener('submit', function(event) {
+            const noteText = document.getElementById('note-text').value.trim();
+            
+            // Check if note is empty
+            if (noteText === '') {
+                event.preventDefault();
+                alert('Please enter a care note before saving.');
+                return false;
+            }
+            
+            // More robust check for unedited templates
+            if (originalTemplateContent !== '' && 
+                (noteText === originalTemplateContent || noteText.replace(/\s+/g, '') === originalTemplateContent.replace(/\s+/g, ''))) {
+                event.preventDefault();
+                alert('Please edit the template content before saving. The template must be modified to save a note.');
+                return false;
+            }
+            
+            return true;
+        });
+    });
+
+    // Store the original template content when inserted
+    async function insertTemplateContent(templateId) {
+        try {
+            const response = await fetch('/note_templates');
+            if (!response.ok) {
+                throw new Error('Failed to load templates');
+            }
+            
+            const templates = await response.json();
+            const template = templates.find(t => t.id == templateId);
+            
+            if (template) {
+                const textarea = document.getElementById('note-text');
+                textarea.value = template.content;
+                originalTemplateContent = template.content.trim(); // Store trimmed original content
+                textarea.focus();
+            }
+        } catch (error) {
+            console.error('Error inserting template content:', error);
+        }
+    }
+
+    // Reset template content when closing modal
+    function closeAddNoteModal() {
+        document.getElementById('add-note-modal').classList.remove('is-active');
+        document.getElementById('note-text').value = '';
+        originalTemplateContent = ''; // Reset when closing the modal
+    }
+
     // Add function to load more notes on demand
     let currentOffset = 50; // Start after the initial 50 notes
     
@@ -637,6 +695,7 @@
             if (template) {
                 const textarea = document.getElementById('note-text');
                 textarea.value = template.content;
+                originalTemplateContent = template.content.trim(); // Store trimmed original content
                 textarea.focus();
             }
         } catch (error) {
@@ -657,6 +716,7 @@
     function closeAddNoteModal() {
         document.getElementById('add-note-modal').classList.remove('is-active');
         document.getElementById('note-text').value = '';
+        originalTemplateContent = ''; // Reset when closing the modal
     }
 </script>
 {% endblock %}
