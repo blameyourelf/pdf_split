@@ -1,337 +1,243 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Notes Dashboard - Contingency EPR</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.min.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.9.3/css/bulma.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-        body {
-            padding: 20px;
-            font-family: 'Inter', sans-serif;
-            background-color: #f8fafc;
-            min-height: 100vh;
-        }
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-        }
-        .title {
-            color: #1a365d;
-            font-weight: 700;
-            font-size: 2rem;
-            margin-bottom: 1rem;
-        }
-        .filter-panel {
-            background: white;
-            border-radius: 8px;
-            padding: 1.5rem;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-            margin-bottom: 2rem;
-        }
-        .notes-table th {
-            background-color: #f7fafc;
-        }
-        .back-button {
-            margin-bottom: 2rem;
-        }
-        .filter-title {
-            font-weight: 600;
-            font-size: 1.1rem;
-            margin-bottom: 1rem;
-            color: #2d3748;
-        }
-        .export-buttons {
-            display: flex;
-            gap: 1rem;
-            margin-top: 1rem;
-            justify-content: flex-end;
-        }
-        .pagination {
-            margin: 2rem 0;
-            justify-content: center;
-        }
-        .notes-content {
-            white-space: pre-wrap;
-            line-height: 1.2; /* Add controlled line height */
-        }
-        .filter-form-row {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 1rem;
-            margin-bottom: 1rem;
-        }
-        .filter-form-item {
-            flex: 1;
-            min-width: 200px;
-        }
-        .tag {
-            margin-right: 0.5rem;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="columns is-mobile">
-            <div class="column">
-                <a href="/" class="button is-light back-button">
+{% extends "base.html" %}
+
+{% block title %}Admin Notes Dashboard - Contingency EPR{% endblock %}
+
+{% block extra_styles %}
+<style>
+    .title {
+        color: #1a365d;
+        font-weight: 700;
+        font-size: 2rem;
+        margin-bottom: 1rem;
+    }
+    .filter-panel {
+        background: white;
+        border-radius: 8px;
+        padding: 1.5rem;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        margin-bottom: 2rem;
+    }
+    .notes-table th {
+        background-color: #f7fafc;
+    }
+    .filter-title {
+        font-weight: 600;
+        font-size: 1.1rem;
+        margin-bottom: 1rem;
+        color: #2d3748;
+    }
+    .export-buttons {
+        display: flex;
+        gap: 1rem;
+        margin-top: 1rem;
+        justify-content: flex-end;
+    }
+    .pagination {
+        margin: 2rem 0;
+        justify-content: center;
+    }
+    .notes-content {
+        white-space: pre-wrap;
+        line-height: 1.2; /* Add controlled line height */
+    }
+    .filter-form-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1rem;
+        margin-bottom: 1rem;
+    }
+    .filter-form-item {
+        flex: 1;
+        min-width: 200px;
+    }
+    .tag {
+        margin-right: 0.5rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1 class="title">
+    Admin Notes Dashboard
+    <form method="POST" action="{{ url_for('toggle_notes') }}" class="is-inline-block ml-4">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="button {% if notes_enabled %}is-danger{% else %}is-success{% endif %} is-light">
+            <span class="icon">
+                <i class="fas {% if notes_enabled %}fa-ban{% else %}fa-check{% endif %}"></i>
+            </span>
+            <span>{% if notes_enabled %}Disable{% else %}Enable{% endif %} Note Adding</span>
+        </button>
+    </form>
+</h1>
+<p class="subtitle">View and manage all newly added notes in the system</p>
+
+<div class="filter-panel">
+    <h3 class="filter-title"><i class="fas fa-filter"></i> Filter Notes</h3>
+
+    <form id="filter-form" method="GET" action="{{ url_for('admin_notes') }}">
+        <div class="filter-form-row">
+            <div class="filter-form-item">
+                <label class="label">Date Range</label>
+                <div class="field has-addons">
+                    <div class="control is-expanded">
+                        <input class="input" type="date" name="date_from" value="{{ filters.date_from or '' }}" id="date-from">
+                    </div>
+                    <div class="control">
+                        <span class="button is-static">to</span>
+                    </div>
+                    <div class="control is-expanded">
+                        <input class="input" type="date" name="date_to" value="{{ filters.date_to or '' }}" id="date-to">
+                    </div>
+                </div>
+            </div>
+
+            <div class="filter-form-item">
+                <label class="label">Ward</label>
+                <div class="control">
+                    <div class="select is-fullwidth">
+                        <select name="ward" id="ward-filter">
+                            <option value="">All Wards</option>
+                            {% for ward_id, ward_info in wards.items() %}
+                                <option value="{{ ward_id }}" {% if filters.ward == ward_id %}selected{% endif %}>
+                                    {{ ward_info.display_name }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="filter-form-item">
+                <label class="label">User</label>
+                <div class="control">
+                    <div class="select is-fullwidth">
+                        <select name="username" id="username-filter">
+                            <option value="">All Users</option>
+                            {% for username_item in usernames %}
+                                <option value="{{ username_item }}" {% if filters.username == username_item %}selected{% endif %}>
+                                    {{ username_item }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="field is-grouped is-grouped-right">
+            <div class="control">
+                <button type="submit" class="button is-primary">
                     <span class="icon">
-                        <i class="fas fa-arrow-left"></i>
+                        <i class="fas fa-search"></i>
                     </span>
-                    <span>Back to Home</span>
+                    <span>Apply Filters</span>
+                </button>
+            </div>
+            <div class="control">
+                <a href="{{ url_for('admin_notes') }}" class="button is-light">
+                    <span class="icon">
+                        <i class="fas fa-undo"></i>
+                    </span>
+                    <span>Reset</span>
                 </a>
             </div>
-            <div class="column is-narrow">
-                <div class="buttons">
-                    <!-- Add timeout settings modal trigger -->
-                    <button class="button is-info is-light" onclick="showTimeoutModal()">
-                        <span class="icon">
-                            <i class="fas fa-clock"></i>
-                        </span>
-                        <span>Session Timeout</span>
-                    </button>
-                    <form method="POST" action="{{ url_for('toggle_notes') }}">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <button type="submit" class="button {% if notes_enabled %}is-danger{% else %}is-success{% endif %} is-light">
-                            <span class="icon">
-                                <i class="fas {% if notes_enabled %}fa-ban{% else %}fa-check{% endif %}"></i>
-                            </span>
-                            <span>{% if notes_enabled %}Disable{% else %}Enable{% endif %} Note Adding</span>
-                        </button>
-                    </form>
-                    <a href="{{ url_for('view_audit_log') }}" class="button is-info is-light">
-                        <span class="icon">
-                            <i class="fas fa-history"></i>
-                        </span>
-                        <span>View Audit Log</span>
-                    </a>
-                </div>
+        </div>
+    </form>
+
+    <!-- Replace the JavaScript with a simplified, more robust version -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // The reset button is just a regular link now - simpler and more reliable
+        });
+    </script>
+
+    <div class="export-buttons">
+        <a href="{{ url_for('export_notes', format='pdf', ward=filters.ward, username=filters.username, date_from=filters.date_from, date_to=filters.date_to) }}" class="button is-danger is-light">
+            <span class="icon">
+                <i class="fas fa-file-pdf"></i>
+            </span>
+            <span>Export as PDF</span>
+        </a>
+        {% if excel_export_available %}
+        <a href="{{ url_for('export_notes', format='excel', ward=filters.ward, username=filters.username, date_from=filters.date_from, date_to=filters.date_to) }}" class="button is-success is-light">
+            <span class="icon">
+                <i class="fas fa-file-excel"></i>
+            </span>
+            <span>Export as Excel</span>
+        </a>
+        {% else %}
+        <button class="button is-success is-light" disabled title="Please install xlsxwriter package">
+            <span class="icon">
+                <i class="fas fa-file-excel"></i>
+            </span>
+            <span>Export as Excel</span>
+        </button>
+        {% endif %}
+    </div>
+</div>
+
+{% if notes %}
+    <div class="box">
+        <div class="is-flex is-justify-content-space-between is-align-items-center mb-4">
+            <div>
+                <span class="tag is-info is-medium">{{ total_notes }} Notes Found</span>
+                {% if filters.applied %}
+                    <span class="tag is-warning is-light">Filters Applied</span>
+                {% endif %}
             </div>
         </div>
         
-        <!-- Add timeout settings modal -->
-        <div class="modal" id="timeout-modal">
-            <div class="modal-background"></div>
-            <div class="modal-card">
-                <header class="modal-card-head">
-                    <p class="modal-card-title">Session Timeout Settings</p>
-                    <button class="delete" aria-label="close" onclick="closeTimeoutModal()"></button>
-                </header>
-                <section class="modal-card-body">
-                    <form id="timeout-form" method="POST" action="{{ url_for('update_timeout_settings_v2') }}">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <div class="field">
-                            <label class="label">Enable Session Timeout</label>
-                            <div class="control">
-                                <label class="checkbox">
-                                    <input type="checkbox" name="timeout_enabled" value="1" 
-                                           {% if timeout_enabled %}checked{% endif %}>
-                                    Automatically log out inactive users
-                                </label>
-                            </div>
-                        </div>
-                        <div class="field">
-                            <label class="label">Timeout Duration (minutes)</label>
-                            <div class="control">
-                                <input class="input" type="number" name="timeout_minutes" 
-                                       value="{{ timeout_minutes }}" min="1">
-                            </div>
-                            <p class="help">Users will be logged out after this many minutes of inactivity</p>
-                        </div>
-                    </form>
-                </section>
-                <footer class="modal-card-foot">
-                    <button class="button is-primary" onclick="document.getElementById('timeout-form').submit()">Save Settings</button>
-                    <button class="button" onclick="closeTimeoutModal()">Cancel</button>
-                </footer>
-            </div>
-        </div>
-
-        <script>
-            function showTimeoutModal() {
-                document.getElementById('timeout-modal').classList.add('is-active');
-            }
-
-            function closeTimeoutModal() {
-                document.getElementById('timeout-modal').classList.remove('is-active');
-            }
-        </script>
-
-        <h1 class="title">Admin Notes Dashboard</h1>
-        <p class="subtitle">View and manage all notes in the system</p>
-
-        <div class="filter-panel">
-            <h3 class="filter-title"><i class="fas fa-filter"></i> Filter Notes</h3>
-
-            <form id="filter-form" method="GET" action="{{ url_for('admin_notes') }}">
-                <div class="filter-form-row">
-                    <div class="filter-form-item">
-                        <label class="label">Date Range</label>
-                        <div class="field has-addons">
-                            <div class="control is-expanded">
-                                <input class="input" type="date" name="date_from" value="{{ filters.date_from or '' }}" id="date-from">
-                            </div>
-                            <div class="control">
-                                <span class="button is-static">to</span>
-                            </div>
-                            <div class="control is-expanded">
-                                <input class="input" type="date" name="date_to" value="{{ filters.date_to or '' }}" id="date-to">
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="filter-form-item">
-                        <label class="label">Ward</label>
-                        <div class="control">
-                            <div class="select is-fullwidth">
-                                <select name="ward" id="ward-filter">
-                                    <option value="">All Wards</option>
-                                    {% for ward_id, ward_info in wards.items() %}
-                                        <option value="{{ ward_id }}" {% if filters.ward == ward_id %}selected{% endif %}>
-                                            {{ ward_info.display_name }}
-                                        </option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="filter-form-item">
-                        <label class="label">User</label>
-                        <div class="control">
-                            <div class="select is-fullwidth">
-                                <select name="username" id="username-filter">
-                                    <option value="">All Users</option>
-                                    {% for username_item in usernames %}
-                                        <option value="{{ username_item }}" {% if filters.username == username_item %}selected{% endif %}>
-                                            {{ username_item }}
-                                        </option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="field is-grouped is-grouped-right">
-                    <div class="control">
-                        <button type="submit" class="button is-primary">
-                            <span class="icon">
-                                <i class="fas fa-search"></i>
-                            </span>
-                            <span>Apply Filters</span>
-                        </button>
-                    </div>
-                    <div class="control">
-                        <a href="{{ url_for('admin_notes') }}" class="button is-light">
-                            <span class="icon">
-                                <i class="fas fa-undo"></i>
-                            </span>
-                            <span>Reset</span>
+        <table class="table is-fullwidth notes-table">
+            <thead>
+                <tr>
+                    <th>Time</th>
+                    <th>Ward</th>
+                    <th>Patient</th>
+                    <th>User</th>
+                    <th>Note</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for note in notes %}
+                <tr>
+                    <td>{{ note.timestamp }}</td>
+                    <td>{{ note.ward }}</td>
+                    <td>
+                        {{ note.patient_name }}
+                        <br>
+                        <small class="has-text-grey">ID: {{ note.patient_id }}</small>
+                    </td>
+                    <td>{{ note.username }}</td>
+                    <td class="notes-content">{{ note.note | replace('\n', '<br>') | safe }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        
+        <!-- Update pagination links to properly maintain filters -->
+        {% if pages > 1 %}
+        <nav class="pagination" role="navigation" aria-label="pagination">
+            <a href="{{ url_for('admin_notes', page=prev_page, ward=filters.ward, username=filters.username, date_from=filters.date_from, date_to=filters.date_to) }}" 
+               class="pagination-previous" {% if page == 1 %}disabled{% endif %}>Previous</a>
+            <a href="{{ url_for('admin_notes', page=next_page, ward=filters.ward, username=filters.username, date_from=filters.date_from, date_to=filters.date_to) }}" 
+               class="pagination-next" {% if page == pages %}disabled{% endif %}>Next</a>
+            <ul class="pagination-list">
+                {% for i in range(1, pages + 1) %}
+                    <li>
+                        <a href="{{ url_for('admin_notes', page=i, ward=filters.ward, username=filters.username, date_from=filters.date_from, date_to=filters.date_to) }}" 
+                           class="pagination-link {% if i == page %}is-current{% endif %}" 
+                           aria-label="Page {{ i }}" aria-current="{% if i == page %}page{% endif %}">
+                           {{ i }}
                         </a>
-                    </div>
-                </div>
-            </form>
-
-            <!-- Replace the JavaScript with a simplified, more robust version -->
-            <script>
-                document.addEventListener('DOMContentLoaded', function() {
-                    // The reset button is just a regular link now - simpler and more reliable
-                });
-            </script>
-
-            <div class="export-buttons">
-                <a href="{{ url_for('export_notes', format='pdf', ward=filters.ward, username=filters.username, date_from=filters.date_from, date_to=filters.date_to) }}" class="button is-danger is-light">
-                    <span class="icon">
-                        <i class="fas fa-file-pdf"></i>
-                    </span>
-                    <span>Export as PDF</span>
-                </a>
-                {% if excel_export_available %}
-                <a href="{{ url_for('export_notes', format='excel', ward=filters.ward, username=filters.username, date_from=filters.date_from, date_to=filters.date_to) }}" class="button is-success is-light">
-                    <span class="icon">
-                        <i class="fas fa-file-excel"></i>
-                    </span>
-                    <span>Export as Excel</span>
-                </a>
-                {% else %}
-                <button class="button is-success is-light" disabled title="Please install xlsxwriter package">
-                    <span class="icon">
-                        <i class="fas fa-file-excel"></i>
-                    </span>
-                    <span>Export as Excel</span>
-                </button>
-                {% endif %}
-            </div>
-        </div>
-
-        {% if notes %}
-            <div class="box">
-                <div class="is-flex is-justify-content-space-between is-align-items-center mb-4">
-                    <div>
-                        <span class="tag is-info is-medium">{{ total_notes }} Notes Found</span>
-                        {% if filters.applied %}
-                            <span class="tag is-warning is-light">Filters Applied</span>
-                        {% endif %}
-                    </div>
-                </div>
-                
-                <table class="table is-fullwidth notes-table">
-                    <thead>
-                        <tr>
-                            <th>Time</th>
-                            <th>Ward</th>
-                            <th>Patient</th>
-                            <th>User</th>
-                            <th>Note</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for note in notes %}
-                        <tr>
-                            <td>{{ note.timestamp }}</td>
-                            <td>{{ note.ward }}</td>
-                            <td>
-                                {{ note.patient_name }}
-                                <br>
-                                <small class="has-text-grey">ID: {{ note.patient_id }}</small>
-                            </td>
-                            <td>{{ note.username }}</td>
-                            <td class="notes-content">{{ note.note | replace('\n', '<br>') | safe }}</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-                
-                <!-- Update pagination links to properly maintain filters -->
-                {% if pages > 1 %}
-                <nav class="pagination" role="navigation" aria-label="pagination">
-                    <a href="{{ url_for('admin_notes', page=prev_page, ward=filters.ward, username=filters.username, date_from=filters.date_from, date_to=filters.date_to) }}" 
-                       class="pagination-previous" {% if page == 1 %}disabled{% endif %}>Previous</a>
-                    <a href="{{ url_for('admin_notes', page=next_page, ward=filters.ward, username=filters.username, date_from=filters.date_from, date_to=filters.date_to) }}" 
-                       class="pagination-next" {% if page == pages %}disabled{% endif %}>Next</a>
-                    <ul class="pagination-list">
-                        {% for i in range(1, pages + 1) %}
-                            <li>
-                                <a href="{{ url_for('admin_notes', page=i, ward=filters.ward, username=filters.username, date_from=filters.date_from, date_to=filters.date_to) }}" 
-                                   class="pagination-link {% if i == page %}is-current{% endif %}" 
-                                   aria-label="Page {{ i }}" aria-current="{% if i == page %}page{% endif %}">
-                                   {{ i }}
-                                </a>
-                            </li>
-                        {% endfor %}
-                    </ul>
-                </nav>
-                {% endif %}
-            </div>
-        {% else %}
-            <div class="notification is-info is-light">
-                <p>No notes found matching your criteria.</p>
-            </div>
+                    </li>
+                {% endfor %}
+            </ul>
+        </nav>
         {% endif %}
     </div>
-</body>
-</html>
+{% else %}
+    <div class="notification is-info is-light">
+        <p>No notes found matching your criteria.</p>
+    </div>
+{% endif %}
+{% endblock %}

@@ -1214,7 +1214,7 @@ def check_session_timeout():
 
 @app.route('/admin/timeout_settings', methods=['POST'])
 @login_required
-def admin_timeout_settings():  # Changed function name to avoid conflict
+def admin_timeout_settings():
     """Handle admin timeout settings updates"""
     if current_user.role != 'admin':
         flash('Access denied')
@@ -1225,17 +1225,21 @@ def admin_timeout_settings():  # Changed function name to avoid conflict
     
     if not minutes_str.isdigit():
         flash('Timeout must be a positive number', 'error')
-        return redirect(url_for('admin_notes'))
+        return redirect(url_for('admin_timeout'))
     
     minutes = int(minutes_str)
-    if minutes < 1 or minutes > 1440:  # 1440 minutes = 24 hours
-        flash('Timeout must be between 1 and 1440 minutes', 'error')
-        return redirect(url_for('admin_notes'))
+    if minutes < 1 or minutes > 180:  # Limit to 3 hours max
+        flash('Timeout must be between 1 and 180 minutes', 'error')
+        return redirect(url_for('admin_timeout'))
     
     Settings.set_setting('timeout_enabled', str(enabled).lower())
     Settings.set_setting('timeout_minutes', str(minutes))
+    
+    # Flash success message
     flash('Session timeout settings updated successfully', 'success')
-    return redirect(url_for('admin_notes'))
+    
+    # Redirect back to the timeout settings page rather than admin_notes
+    return redirect(url_for('admin_timeout'))
 
 @click.command('init-db')
 @with_appcontext
@@ -1720,6 +1724,21 @@ def admin_remove_user(user_id):
         flash(f'Error removing user: {str(e)}', 'danger')
     
     return redirect(url_for('admin_users'))
+
+@app.route('/admin/timeout')
+@login_required
+def admin_timeout():
+    """Admin page for configuring session timeout settings"""
+    if current_user.role != 'admin':
+        flash('Access denied')
+        return redirect(url_for('index'))
+    
+    # Don't clear flash messages - allow success confirmations to display
+    # session.pop('_flashes', None)  # This line was causing the issue
+    
+    return render_template('admin_timeout.html',
+                         timeout_enabled=get_timeout_enabled(),
+                         timeout_minutes=get_timeout_minutes())
 
 if __name__ == '__main__':
     with app.app_context():
