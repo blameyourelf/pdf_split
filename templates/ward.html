@@ -83,6 +83,34 @@
         0% { transform: rotate(0deg); }
         100% { transform: rotate(360deg); }
     }
+    .similar-name-indicator {
+        color: #eab308; /* Amber color for the warning */
+        margin-left: 0.5rem;
+        position: relative; /* Required for tooltip positioning */
+    }
+    
+    /* Tooltip styles */
+    .similar-name-indicator .tooltiptext {
+        visibility: hidden;
+        width: 150px;
+        background-color: #333;
+        color: #fff;
+        text-align: center;
+        border-radius: 6px;
+        padding: 5px;
+        position: absolute;
+        z-index: 1;
+        bottom: 125%;
+        left: 50%;
+        margin-left: -75px;
+        opacity: 0;
+        transition: opacity 0.3s;
+    }
+    
+    .similar-name-indicator:hover .tooltiptext {
+        visibility: visible;
+        opacity: 1;
+    }
 </style>
 {% endblock %}
 
@@ -140,7 +168,7 @@
                         </span>
                         <div class="patient-details">
                             <span class="patient-id">{{ patient_id }}</span>
-                            <span class="patient-name">{{ patient_info.name }}</span>
+                            <span class="patient-name">{{ patient_info.name }} {% if patient_info.similar_names %}<i class="fas fa-exclamation-triangle similar-name-indicator"></i>{% endif %}</span>
                         </div>
                     </div>
                     <i class="fas fa-chevron-right"></i>
@@ -176,7 +204,6 @@
         }
     }
 
-    // Update the displayPatients function to remove DOB and similar names
     function displayPatients(patients) {
         const list = document.getElementById('patient-list');
         list.innerHTML = '';
@@ -196,7 +223,7 @@
                         </span>
                         <div class="patient-details">
                             <span class="patient-id">${result.id}</span>
-                            <span class="patient-name">${result.name}</span>
+                            <span class="patient-name">${result.name} ${result.similar_names ? '<i class="fas fa-exclamation-triangle similar-name-indicator"><span class="tooltiptext">Similar names found, please check CHI number</span></i>' : ''}</span>
                         </div>
                     </div>
                     <i class="fas fa-chevron-right"></i>

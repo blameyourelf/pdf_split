@@ -1316,10 +1316,19 @@ def search_ward_patients(ward_id):
     # Get patients ordered by name
     patients = base_query.order_by(Patient.name).all()
     
+    # Count names to identify similar names
+    name_counts = {}
+    for patient in patients:
+        name = patient.name.lower()
+        if name not in name_counts:
+            name_counts[name] = 0
+        name_counts[name] += 1
+    
     # Format results - simplified to remove DOB and similar_names
     results = [{
         'id': patient.hospital_id,
-        'name': patient.name or 'Unknown'
+        'name': patient.name or 'Unknown',
+        'similar_names': name_counts[patient.name.lower()] > 1
     } for patient in patients]
     
     return jsonify(results)
