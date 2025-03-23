@@ -43,14 +43,27 @@ The project relies on several Python packages:
     ```
 
 ## Initial Setup
-1. Initialize the database:
+1. Place ward PDF files in the project root directory:
+   - Files should be named `ward_X_records.pdf` where X is the ward number or name
+   - Example: `ward_1_records.pdf`, `ward_Pediatrics_records.pdf`
+
+2. Initialize the project:
     ```sh
-    python init_db.py
+    python initialize_project.py
     ```
-2. Run the database migration script to load data:
-    ```sh
-    python migrations/migrate_to_new_schema.py
-    ```
+   This will:
+   - Back up any existing databases
+   - Create all required database tables
+   - Apply necessary database indexes
+   - Create initial admin and user accounts
+   - Configure default system settings
+   - Process ward PDF files
+
+3. Default login credentials:
+   - Admin: username: `admin`, password: `admin123`
+   - Nurse: username: `nurse1`, password: `nurse123`
+
+   **Important**: Change these passwords immediately after first login
 
 ## Usage
 1. Start the application:

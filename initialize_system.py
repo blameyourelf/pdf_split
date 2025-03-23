@@ -8,6 +8,10 @@ from datetime import datetime, UTC
 from sqlalchemy import inspect, text
 import os
 import shutil
+import sys
+
+# Add migrations directory to path for importing apply_indexes
+sys.path.append(os.path.join(os.path.dirname(__file__), 'migrations'))
 
 def backup_database():
     """Create backup of existing database"""
@@ -39,8 +43,13 @@ def initialize_system():
             db.create_all()
             db.create_all(bind=['audit'])
             
+            # Apply database indexes
+            print("\n3. Applying database indexes...")
+            from apply_indexes import apply_indexes
+            apply_indexes()
+            
             # Create initial users
-            print("\n3. Creating initial users...")
+            print("\n4. Creating initial users...")
             admin = User(
                 username='admin',
                 password_hash=generate_password_hash('admin123'),
@@ -60,7 +69,7 @@ def initialize_system():
             print("\nAdmin user 'admin' created with password 'admin123'")
             
             # Initialize settings
-            print("\n4. Initializing system settings...")
+            print("\n5. Initializing system settings...")
             settings = {
                 'notes_enabled': 'true',
                 'timeout_enabled': 'true',
@@ -70,7 +79,7 @@ def initialize_system():
                 Settings.set_setting(key, value)
             
             # Process existing ward PDFs
-            print("\n5. Processing existing ward PDFs...")
+            print("\n6. Processing existing ward PDFs...")
             from deployment_initialize import process_ward_pdfs
             if process_ward_pdfs():
                 print("\n=== System Initialization Completed Successfully ===")

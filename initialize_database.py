@@ -6,6 +6,10 @@ import re
 from datetime import datetime
 from config import Config
 from PyPDF2 import PdfReader
+import sys
+
+# Add migrations directory to path for importing apply_indexes
+sys.path.append(os.path.join(os.path.dirname(__file__), 'migrations'))
 
 # Fix the invalid escape sequence warning
 app.config.from_object(Config)
@@ -197,6 +201,15 @@ def initialize_database():
             # Then create tables in the pdf_parsed database
             logger.info("Creating database tables in pdf_parsed database...")
             db.create_all(bind='pdf_parsed')
+            
+            # Apply database indexes after creating tables
+            logger.info("Applying database indexes...")
+            try:
+                from apply_indexes import apply_indexes
+                apply_indexes()
+                logger.info("Database indexes applied successfully")
+            except Exception as e:
+                logger.error(f"Failed to apply database indexes: {str(e)}")
             
             # Verify that the tables are created in both databases
             # 1. Check main database
